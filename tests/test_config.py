@@ -15,8 +15,8 @@ def test_load_real_config():
     cfg = load_config(repo_root / "config.yaml")
     assert cfg.phabricator.base_url.startswith("https://phabricator.services.mozilla.com")
     assert cfg.phabricator.base_url.endswith("/")
-    assert cfg.defaults.risk_threshold == 2
-    assert cfg.defaults.complexity_threshold == 2
+    assert cfg.defaults.risk_threshold == 3
+    assert cfg.defaults.complexity_threshold == 3
     slugs = [g.slug for g in cfg.reviewer_groups]
     assert "ip-protection-reviewers" in slugs
     assert "home-newtab-reviewers" in slugs

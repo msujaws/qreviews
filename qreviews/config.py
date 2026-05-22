@@ -31,8 +31,8 @@ class AnthropicConfig(BaseModel):
 
 
 class Defaults(BaseModel):
-    risk_threshold: int = 2
-    complexity_threshold: int = 2
+    risk_threshold: int = 3
+    complexity_threshold: int = 3
 
 
 class DashboardConfig(BaseModel):

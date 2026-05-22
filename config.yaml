@@ -21,8 +21,8 @@ defaults:
   # A revision is auto-reviewed when BOTH risk and complexity are STRICTLY LESS
   # than these thresholds. Increase to be more permissive, decrease for stricter
   # gating.
-  risk_threshold: 2
-  complexity_threshold: 2
+  risk_threshold: 3
+  complexity_threshold: 3
 
 dashboard:
   host: 127.0.0.1

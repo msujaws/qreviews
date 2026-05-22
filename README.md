@@ -69,7 +69,7 @@ python -m qreviews dashboard
    bot calls Claude (cheap model, e.g. Haiku) to score risk and complexity on
    the unified diff. Strict JSON output, factors cited per axis.
 3. **Gate.** If `risk < risk_threshold AND complexity < complexity_threshold`
-   (defaults: both `< 2`), the bot proceeds to review. Otherwise it logs the
+   (defaults: both `< 3`), the bot proceeds to review. Otherwise it logs the
    scores and skips.
 4. **Review (with searchfox tools).** Loads the configured `SKILL.md` for the
    reviewer group and runs a multi-turn Claude conversation. The model has
@@ -102,8 +102,8 @@ anthropic:
   review_model: claude-sonnet-4-6
 
 defaults:
-  risk_threshold: 2                   # STRICTLY LESS THAN this triggers review
-  complexity_threshold: 2
+  risk_threshold: 3                   # STRICTLY LESS THAN this triggers review
+  complexity_threshold: 3
 
 reviewer_groups:
   - slug: ip-protection-reviewers
