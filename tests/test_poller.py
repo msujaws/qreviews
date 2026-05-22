@@ -130,6 +130,32 @@ def test_oversized_diff_skipped(mocked_poller):
     anthropic.messages.create.assert_not_called()
 
 
+def test_already_accepted_revision_is_skipped(mocked_poller):
+    poller, conduit, anthropic = mocked_poller
+    accepted = Revision(
+        phid="PHID-DREV-100",
+        id=100,
+        title="Already approved",
+        summary="",
+        status="accepted",
+        author_phid="PHID-USER-1",
+        repository_phid=None,
+        bug_id=None,
+        date_created=1716000000,
+        date_modified=1716000200,
+        reviewer_phids=["PHID-PROJ-ip"],
+    )
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(accepted, group, dry_run=True)
+    assert result.posted is False
+    assert result.skipped_reason == "already_accepted"
+    # No diff fetch, no scoring, no comment posted.
+    conduit.latest_diff.assert_not_called()
+    conduit.get_raw_diff.assert_not_called()
+    anthropic.messages.create.assert_not_called()
+    conduit.post_comment.assert_not_called()
+
+
 def test_poll_group_advances_watermark(mocked_poller):
     poller, conduit, anthropic = mocked_poller
     anthropic.messages.create.return_value = _claude_text(json.dumps({

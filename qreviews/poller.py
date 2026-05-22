@@ -76,6 +76,14 @@ class Poller:
         *,
         dry_run: bool = False,
     ) -> ProcessResult:
+        if revision.status == "accepted":
+            log.info("skipping %s: already accepted by a human reviewer", revision.display_id)
+            return ProcessResult(
+                revision_id=revision.id,
+                posted=False,
+                skipped_reason="already_accepted",
+            )
+
         diff = self.conduit.latest_diff(revision.phid)
         if not diff:
             log.warning("no diff found for %s", revision.display_id)
