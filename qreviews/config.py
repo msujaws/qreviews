@@ -91,6 +91,15 @@ def load_config(config_path: str | Path = "config.yaml") -> Config:
         raise FileNotFoundError(f"config file not found: {path}")
     with path.open("r") as f:
         raw = yaml.safe_load(f)
+
+    # Env-var overrides so containerized deployments (Railway, etc.) can point
+    # the DB at a mounted volume and change polling cadence without forking
+    # config.yaml.
+    if env_db := os.environ.get("QREVIEWS_DB_PATH"):
+        raw.setdefault("storage", {})["db_path"] = env_db
+    if env_interval := os.environ.get("QREVIEWS_POLL_INTERVAL_SECONDS"):
+        raw.setdefault("phabricator", {})["poll_interval_seconds"] = int(env_interval)
+
     return Config.model_validate(raw)
 
 
