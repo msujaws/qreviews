@@ -21,3 +21,12 @@ qreviews.db-shm
 *.sqlite-shm
 
 .DS_Store
+
+# Claude Code local harness state (per-session scheduled task locks, etc.)
+.claude/
+
+# Dashboard frontend — commit web_dist/ (the built bundle) but not node_modules
+qreviews/dashboard/web/node_modules/
+qreviews/dashboard/web/dist/
+qreviews/dashboard/web/.vite/
+qreviews/dashboard/web/*.tsbuildinfo
