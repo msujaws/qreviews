@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  launchd agent that runs `qreviews poll` continuously.
+
+  Install (per-user, login session):
+      sed -e "s|@REPO@|$PWD|g" deploy/com.mozilla.qreviews.plist \
+          > ~/Library/LaunchAgents/com.mozilla.qreviews.plist
+      launchctl bootstrap "gui/$UID" \
+          ~/Library/LaunchAgents/com.mozilla.qreviews.plist
+
+  Status / logs:
+      launchctl print "gui/$UID/com.mozilla.qreviews"
+      tail -f @REPO@/logs/qreviews.out @REPO@/logs/qreviews.err
+
+  Uninstall:
+      launchctl bootout "gui/$UID/com.mozilla.qreviews"
+      rm ~/Library/LaunchAgents/com.mozilla.qreviews.plist
+
+  Replace @REPO@ with the absolute path to your checkout before installing.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.mozilla.qreviews</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>@REPO@/.venv/bin/python</string>
+        <string>-m</string>
+        <string>qreviews</string>
+        <string>poll</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>@REPO@</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+
+    <!-- Restart no faster than every 30s if the process keeps exiting. -->
+    <key>ThrottleInterval</key>
+    <integer>30</integer>
+
+    <key>StandardOutPath</key>
+    <string>@REPO@/logs/qreviews.out</string>
+
+    <key>StandardErrorPath</key>
+    <string>@REPO@/logs/qreviews.err</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+
+    <!-- Soft limits so a runaway can't pin a laptop. -->
+    <key>SoftResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>1024</integer>
+    </dict>
+</dict>
+</plist>

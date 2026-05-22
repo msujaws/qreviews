@@ -1,0 +1,50 @@
+"""Config loading + threshold fallback."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from qreviews.config import Config, load_config, load_secrets
+
+
+def test_load_real_config():
+    """The repo's own config.yaml should parse."""
+    repo_root = Path(__file__).parent.parent
+    cfg = load_config(repo_root / "config.yaml")
+    assert cfg.phabricator.base_url.startswith("https://phabricator.services.mozilla.com")
+    assert cfg.phabricator.base_url.endswith("/")
+    assert cfg.defaults.risk_threshold == 2
+    assert cfg.defaults.complexity_threshold == 2
+    slugs = [g.slug for g in cfg.reviewer_groups]
+    assert "ip-protection-reviewers" in slugs
+    assert "home-newtab-reviewers" in slugs
+
+
+def test_threshold_fallback(config: Config):
+    g = config.group_by_slug("ip-protection-reviewers")
+    assert g.effective_risk_threshold(config.defaults) == 2
+    g.risk_threshold = 5
+    assert g.effective_risk_threshold(config.defaults) == 5
+
+
+def test_secrets_required(tmp_path, monkeypatch):
+    monkeypatch.delenv("PHABRICATOR_API_TOKEN", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="PHABRICATOR_API_TOKEN"):
+        load_secrets(tmp_path / "nonexistent.env")
+
+
+def test_secrets_loads_from_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("PHABRICATOR_API_TOKEN", "api-test-token")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    s = load_secrets(tmp_path / "nonexistent.env")
+    assert s.phabricator_api_token == "api-test-token"
+    assert s.anthropic_api_key == "sk-ant-test"
+
+
+def test_enabled_groups(config: Config):
+    enabled = config.enabled_groups()
+    assert len(enabled) == 1
+    assert enabled[0].slug == "ip-protection-reviewers"

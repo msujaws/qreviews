@@ -1,0 +1,45 @@
+[project]
+name = "qreviews"
+version = "0.1.0"
+description = "Autonomous Phabricator review bot with metrics dashboard for Mozilla"
+requires-python = ">=3.11"
+authors = [{ name = "Jared Wein", email = "jwein@mozilla.com" }]
+dependencies = [
+    "anthropic>=0.40.0",
+    "requests>=2.32.0",
+    "pydantic>=2.7.0",
+    "PyYAML>=6.0.1",
+    "python-dotenv>=1.0.1",
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.30.0",
+    "jinja2>=3.1.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-mock>=3.12.0",
+    "httpx>=0.27.0",         # FastAPI TestClient
+    "ruff>=0.5.0",
+]
+
+[project.scripts]
+qreviews = "qreviews.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["qreviews"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

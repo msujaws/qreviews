@@ -1,0 +1,44 @@
+phabricator:
+  base_url: https://phabricator.services.mozilla.com/api/
+  poll_interval_seconds: 180
+  user_agent: "qreviews-bot/0.1 (jwein@mozilla.com)"
+  # When polling, look back this many seconds before the last watermark so
+  # nothing slips through a race window.
+  watermark_overlap_seconds: 60
+  # Don't try to score/review revisions whose raw diff exceeds this size.
+  max_diff_bytes: 200000
+
+anthropic:
+  # Cheap model for the scoring gate. Keep this fast and inexpensive.
+  scoring_model: claude-haiku-4-5-20251001
+  # Used for the full review when scores pass the threshold.
+  review_model: claude-sonnet-4-6
+  # Token caps to keep runaway costs bounded.
+  scoring_max_tokens: 1024
+  review_max_tokens: 4096
+
+defaults:
+  # A revision is auto-reviewed when BOTH risk and complexity are STRICTLY LESS
+  # than these thresholds. Increase to be more permissive, decrease for stricter
+  # gating.
+  risk_threshold: 2
+  complexity_threshold: 2
+
+dashboard:
+  host: 127.0.0.1
+  port: 8765
+
+storage:
+  # Path to the SQLite file. Relative paths are resolved against the CWD where
+  # the CLI is invoked.
+  db_path: qreviews.db
+
+reviewer_groups:
+  - slug: ip-protection-reviewers
+    enabled: true
+    skill_path: skills/ip-protection-review/SKILL.md
+    # risk_threshold and complexity_threshold are optional here; omit to inherit defaults.
+
+  - slug: home-newtab-reviewers
+    enabled: true
+    skill_path: skills/home-newtab-review/SKILL.md
