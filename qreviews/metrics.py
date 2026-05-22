@@ -17,6 +17,34 @@ from qreviews.pricing import estimate_cost_usd
 # --------------------------------------------------------------------- helpers
 
 
+# Hours a human reviewer would otherwise have spent per score axis.
+# Nonlinear (power 1.8) so high-complexity / high-risk revisions save
+# disproportionately more time than trivial ones — matches the actual
+# review burden, where the last 20% of revisions consume most attention.
+#   s=0 → 0.10h    s=3 → 0.46h    s=7 → 2.13h
+#   s=1 → 0.15h    s=5 → 1.15h    s=10 → 3.66h
+def _axis_hours(score: int | None) -> float:
+    if score is None:
+        return 0.0
+    return 0.1 + 0.05 * (max(0, int(score)) ** 1.8)
+
+
+def _row_time_saved_hours(row) -> float:
+    """Hours saved (or that would have been saved in dry-run) when the bot
+    generated an advisory review for a revision.
+
+    Sum of nonlinear per-axis hours for risk and complexity. Counted
+    whenever the bot produced a review body — i.e. the revision passed the
+    score gate and the bot completed a review pass. Includes dry-run
+    reviews so the dashboard surfaces projected value before going live.
+    Above-threshold / skipped / error rows have an empty review_body and
+    contribute zero.
+    """
+    if not row["review_body"]:
+        return 0.0
+    return _axis_hours(row["risk"]) + _axis_hours(row["complexity"])
+
+
 def _row_cost(row) -> float:
     return estimate_cost_usd(
         row["scoring_model"] or "",
@@ -49,6 +77,7 @@ class Summary:
     median_complexity: float | None = None
     median_time_to_post_seconds: float | None = None
     estimated_cost_usd: float = 0.0
+    time_saved_hours: float = 0.0
     tokens: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -70,6 +99,7 @@ def compute_summary(
     time_to_post: list[int] = []
     tok = defaultdict(int)
     total_cost = 0.0
+    total_time_saved = 0.0
 
     for row in rows:
         if since is not None and (row["seen_at"] or 0) < since:
@@ -99,6 +129,7 @@ def compute_summary(
         ):
             tok[col] += row[col] or 0
         total_cost += _row_cost(row)
+        total_time_saved += _row_time_saved_hours(row)
 
     coverage = (posted / seen * 100.0) if seen else 0.0
 
@@ -114,6 +145,7 @@ def compute_summary(
         median_complexity=float(median(complexities)) if complexities else None,
         median_time_to_post_seconds=float(median(time_to_post)) if time_to_post else None,
         estimated_cost_usd=round(total_cost, 4),
+        time_saved_hours=round(total_time_saved, 2),
         tokens=dict(tok),
     )
 

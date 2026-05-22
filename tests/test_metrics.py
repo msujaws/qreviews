@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from qreviews.metrics import compute_summary, daily_throughput, score_histograms
+from qreviews.metrics import (
+    _axis_hours,
+    compute_summary,
+    daily_throughput,
+    score_histograms,
+)
 from qreviews.state import Store
 
 
@@ -61,6 +66,28 @@ def test_histograms(store: Store):
     assert len(h["complexity"]) == 11
     assert sum(h["risk"]) == 4
     assert sum(h["complexity"]) == 4
+
+
+def test_axis_hours_is_nonlinear():
+    # Each step up should add more hours than the previous step (positive
+    # second derivative) — that's the whole point of the nonlinear curve.
+    deltas = [_axis_hours(s + 1) - _axis_hours(s) for s in range(0, 10)]
+    for i in range(1, len(deltas)):
+        assert deltas[i] > deltas[i - 1], f"hours curve flattens at s={i}"
+    # Sanity checks at endpoints.
+    assert _axis_hours(0) == 0.1
+    assert _axis_hours(10) > _axis_hours(5) * 2  # 10 saves much more than 2x of 5
+
+
+def test_time_saved_counts_generated_reviews(store: Store):
+    _populate(store, n_seen=5, n_posted=3)
+    rows = list(store.iter_for_metrics())
+    summary = compute_summary(rows)
+    # _populate only writes review_body for the n_posted rows. Each has
+    # risk=1, complexity=1, so per-row hours = 2 * (0.1 + 0.05 * 1^1.8).
+    # Above-threshold rows (no review_body) contribute zero.
+    assert summary.time_saved_hours == round(3 * (2 * _axis_hours(1)), 2)
+    assert summary.time_saved_hours > 0
 
 
 def test_throughput(store: Store):
