@@ -1,6 +1,7 @@
 """FastAPI app: read-only metrics dashboard for qreviews.
 
-Serves a single-page Jinja template + a small JSON API consumed by the page.
+Serves a single-page React/Mantine SPA built by Vite (under
+``qreviews/dashboard/web/``) and a small JSON API consumed by the page.
 Reads the same SQLite file the poller writes to (WAL mode lets us coexist).
 """
 
@@ -9,9 +10,9 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 
 from qreviews.config import Config, load_config
 from qreviews.metrics import compute_summary, daily_throughput, row_to_detail, score_histograms
@@ -20,34 +21,29 @@ from qreviews.webhook import build_router as build_webhook_router
 
 log = logging.getLogger(__name__)
 
-TEMPLATES_DIR = Path(__file__).parent / "templates"
+WEB_DIST = Path(__file__).parent / "web_dist"
+
+_MISSING_BUNDLE_HTML = """<!doctype html>
+<html><head><meta charset="utf-8"><title>qreviews — dashboard bundle missing</title>
+<style>body{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#0B1220;color:#E8ECF4;padding:48px;line-height:1.6}
+code{background:#121A2B;padding:2px 6px;border-radius:2px;color:#FF6A3D}
+h1{color:#FF6A3D;font-family:Georgia,serif;font-weight:800;letter-spacing:-0.02em}</style></head>
+<body><h1>dashboard bundle missing</h1>
+<p>The React bundle under <code>qreviews/dashboard/web_dist/</code> was not found.</p>
+<p>Build it with:</p>
+<pre><code>npm --prefix qreviews/dashboard/web install
+npm --prefix qreviews/dashboard/web run build</code></pre>
+<p>Then restart <code>python -m qreviews dashboard</code>.</p>
+<p>API routes are still served — try <code>/api/groups</code>.</p>
+</body></html>"""
 
 
 def create_app(*, config_path: str = "config.yaml") -> FastAPI:
     config: Config = load_config(config_path)
     store = Store(config.storage.db_path)
     store.init_schema()
-    templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
     app = FastAPI(title="qreviews dashboard", docs_url=None, redoc_url=None)
-
-    enabled_group_slugs = [g.slug for g in config.reviewer_groups]
-
-    # ------------------------------------------------------------ page
-
-    @app.get("/", response_class=HTMLResponse)
-    def index(request: Request) -> HTMLResponse:
-        return templates.TemplateResponse(
-            request,
-            "index.html",
-            {
-                "groups": enabled_group_slugs,
-                "default_thresholds": {
-                    "risk": config.defaults.risk_threshold,
-                    "complexity": config.defaults.complexity_threshold,
-                },
-            },
-        )
 
     # ------------------------------------------------------------ api
 
@@ -81,9 +77,6 @@ def create_app(*, config_path: str = "config.yaml") -> FastAPI:
             raise HTTPException(status_code=404, detail="not found")
         return JSONResponse(row_to_detail(row))
 
-    # Phabricator Herald webhook (POST /phabricator/herald) — same FastAPI app.
-    app.include_router(build_webhook_router(config, store))
-
     @app.get("/api/groups")
     def api_groups() -> JSONResponse:
         return JSONResponse(
@@ -98,5 +91,21 @@ def create_app(*, config_path: str = "config.yaml") -> FastAPI:
                 for g in config.reviewer_groups
             ]
         )
+
+    # Phabricator Herald webhook (POST /phabricator/herald) — same FastAPI app.
+    app.include_router(build_webhook_router(config, store))
+
+    # ------------------------------------------------------------ spa
+    # Mount the built React bundle last so /api/* and /phabricator/* still
+    # win. ``html=True`` makes StaticFiles serve index.html for ``/`` and
+    # for any path that doesn't match a real file.
+    if WEB_DIST.is_dir() and (WEB_DIST / "index.html").is_file():
+        app.mount("/", StaticFiles(directory=str(WEB_DIST), html=True), name="web")
+    else:
+        log.warning("web_dist/ not found at %s — serving fallback page at /", WEB_DIST)
+
+        @app.get("/", response_class=HTMLResponse)
+        def _missing_bundle() -> HTMLResponse:
+            return HTMLResponse(_MISSING_BUNDLE_HTML, status_code=503)
 
     return app

@@ -1,0 +1,15 @@
+/* Fontsource @import statements were moved to main.tsx so Vite resolves
+   the .woff2 url() references correctly. Tailwind v4's CSS @import
+   resolver doesn't follow URLs into node_modules.
+
+   Migra is not freely licensed — we fall back to IBM Plex Serif at heavy
+   weight for KPI numerals. Drop a real .woff2 into web/public/fonts/ and
+   replace this @font-face if you license Migra later. */
+
+@font-face {
+  font-family: "Migra";
+  src: local("IBM Plex Serif Bold"), local("IBM Plex Serif"), local("Georgia");
+  font-weight: 700 900;
+  font-style: normal;
+  font-display: swap;
+}

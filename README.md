@@ -146,18 +146,57 @@ reviewer_groups:
 
 ## Dashboard
 
-`python -m qreviews dashboard` serves a single-page view with:
+`python -m qreviews dashboard` serves **QualReviews**, a React/Mantine
+single-page app (deep navy + Mozilla flame orange, IBM Plex typography)
+with:
 
-- **KPI cards**: revisions seen, auto-reviewed, % coverage, median scores,
-  cumulative Claude cost.
-- **Throughput chart**: daily seen vs. auto-reviewed.
-- **Score histograms**: risk and complexity distributions (helps tune
-  thresholds).
-- **Recent reviews table**: each row clickable, opening a drawer with the
-  full posted comment, factors, token usage, and a link to Phabricator.
+- **KPI row**: revisions seen, auto-reviewed, % coverage, median scores,
+  cumulative Claude cost — rendered as oversized tabular-figure numerals.
+- **Throughput chart**: daily seen vs. auto-reviewed (`@mantine/charts`
+  `LineChart`).
+- **Score histograms**: risk and complexity distributions (`BarChart`),
+  with the current gate thresholds annotated.
+- **Recent revisions table**: each row clickable, opening a drawer with
+  the full posted comment (markdown), factors, token usage, and a link
+  to Phabricator.
 
-The dashboard reads the same SQLite file the poller writes to (WAL mode), so
-you can run both side-by-side.
+The dashboard reads the same SQLite file the poller writes to (WAL mode),
+so you can run both side-by-side. Auto-refreshes every 30 seconds via
+TanStack Query.
+
+### Stack
+
+- Vite + React + TypeScript
+- [Mantine](https://mantine.dev) 7 (`@mantine/core`, `@mantine/hooks`,
+  `@mantine/charts`) for components and charts
+- TailwindCSS v4 for layout utilities (CSS layers prevent its Preflight
+  from stomping Mantine component styles)
+- TanStack Query for data fetching
+- `react-markdown` + `remark-gfm` for review-body rendering
+
+### Building the frontend
+
+The built bundle is committed at `qreviews/dashboard/web_dist/`, so
+`python -m qreviews dashboard` works without Node.js installed. To rebuild
+after editing the React source under `qreviews/dashboard/web/src/`:
+
+```bash
+npm --prefix qreviews/dashboard/web install
+npm --prefix qreviews/dashboard/web run build
+```
+
+For iterative frontend development, run the Vite dev server (port 5173)
+against a live FastAPI on 8765 — the dev server proxies `/api` and
+`/phabricator` automatically:
+
+```bash
+# terminal 1
+python -m qreviews dashboard
+
+# terminal 2
+npm --prefix qreviews/dashboard/web run dev
+# → http://127.0.0.1:5173 with HMR
+```
 
 ---
 
@@ -197,8 +236,9 @@ python -m qreviews review D123456 --post
 | `qreviews/poller.py`              | Discover → score → gate → review → post → record.    |
 | `qreviews/pricing.py`             | Model price table for cost estimation.               |
 | `qreviews/metrics.py`             | Aggregations for the CLI + dashboard.                |
-| `qreviews/dashboard/app.py`       | FastAPI app + JSON API.                              |
-| `qreviews/dashboard/templates/index.html` | Single-page dashboard (Tailwind + Chart.js). |
+| `qreviews/dashboard/app.py`       | FastAPI app + JSON API + StaticFiles mount.          |
+| `qreviews/dashboard/web/`         | React/Mantine SPA source (Vite + TS).                |
+| `qreviews/dashboard/web_dist/`    | Built SPA bundle (committed; served by FastAPI).     |
 | `qreviews/__main__.py`            | CLI entrypoint.                                      |
 
 ---
