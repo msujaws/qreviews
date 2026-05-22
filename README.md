@@ -255,6 +255,27 @@ Logs land at `logs/qreviews.{out,err}`. The agent restarts on crash with a
 
 ---
 
+## Deploying to Railway
+
+A single Railway service runs the poller daemon and the dashboard together,
+sharing one SQLite file on a persistent volume. `railway.json` and
+`scripts/railway_start.sh` are committed; Railway autodeploys on push to
+`main`. One-time setup:
+
+1. **Attach a Volume** to the service, mounted at `/data`.
+2. **Set environment variables** in the Railway dashboard:
+   - `ANTHROPIC_API_KEY` and `PHABRICATOR_API_TOKEN` (required secrets).
+   - `QREVIEWS_DB_PATH=/data/qreviews.db` (points SQLite at the volume).
+   - `QREVIEWS_POLL_INTERVAL_SECONDS=3600` (hourly polling).
+3. **Generate a public domain** under Settings → Networking. The dashboard
+   contents are not sensitive; only the API keys above are.
+
+The webhook endpoint (`POST /phabricator/herald`) is included but
+unconfigured — without `PHABRICATOR_WEBHOOK_SECRET` set, signed POSTs are
+the only thing accepted, so leaving it exposed is harmless.
+
+---
+
 ## Phabricator Herald webhook (push-based triggering)
 
 The dashboard FastAPI app also exposes `POST /phabricator/herald`. To use:
