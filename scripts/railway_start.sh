@@ -18,15 +18,12 @@ cleanup() {
 trap cleanup TERM INT
 
 # Idempotent: creates tables on a fresh volume, no-op afterwards.
-python -m qreviews init-db --config config.yaml
+python -m qreviews init-db
 
-python -m qreviews poll --config config.yaml &
+python -m qreviews poll &
 POLL_PID=$!
 
-python -m qreviews dashboard \
-  --config config.yaml \
-  --host 0.0.0.0 \
-  --port "${PORT:-8000}" &
+python -m qreviews dashboard --host 0.0.0.0 --port "${PORT:-8000}" &
 DASH_PID=$!
 
 # If either child exits, tear down both so Railway notices and restarts.
