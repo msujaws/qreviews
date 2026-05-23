@@ -94,6 +94,39 @@ class Poller:
             log.debug("already processed %s diff %s", revision.display_id, diff.id)
             return ProcessResult(revision_id=revision.id, posted=False, skipped_reason="dedup")
 
+        # One review per revision: if we've already posted on any diff of this
+        # revision, don't review again even when the author pushes a new diff.
+        if self.store.already_posted_on_revision(revision.phid):
+            log.info(
+                "skipping %s: qreviews already commented on a prior diff",
+                revision.display_id,
+            )
+            return ProcessResult(
+                revision_id=revision.id,
+                posted=False,
+                skipped_reason="already_reviewed_by_qreviews",
+            )
+
+        # Engagement signal: if a non-author human has commented on the
+        # revision, a reviewer is already paying attention — stay out of the
+        # way. Application-issued transactions (Herald, etc.) are filtered.
+        human_commenters = self.conduit.human_commenter_phids(
+            revision.id,
+            author_phid=revision.author_phid,
+            ignore_phids=set(self.config.phabricator.ignore_commenter_phids),
+        )
+        if human_commenters:
+            log.info(
+                "skipping %s: already commented on by %d non-author user(s)",
+                revision.display_id,
+                len(human_commenters),
+            )
+            return ProcessResult(
+                revision_id=revision.id,
+                posted=False,
+                skipped_reason="already_commented",
+            )
+
         self.store.record_seen(
             revision_phid=revision.phid,
             diff_phid=diff.phid,

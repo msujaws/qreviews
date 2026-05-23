@@ -54,6 +54,9 @@ def mocked_poller(config, store, tmp_path):
     conduit.search_revisions.return_value = [_rev()]
     conduit.search_revisions_by_phids.return_value = []
     conduit.post_comment.return_value = {"object": {"id": 100}}
+    # Default: no human commenters — set explicitly so MagicMock's truthy
+    # default doesn't accidentally trip the "already_commented" skip.
+    conduit.human_commenter_phids.return_value = set()
 
     anthropic = MagicMock()
 
@@ -151,6 +154,56 @@ def test_already_accepted_revision_is_skipped(mocked_poller):
     assert result.skipped_reason == "already_accepted"
     # No diff fetch, no scoring, no comment posted.
     conduit.latest_diff.assert_not_called()
+    conduit.get_raw_diff.assert_not_called()
+    anthropic.messages.create.assert_not_called()
+    conduit.post_comment.assert_not_called()
+
+
+def test_revision_with_human_comment_is_skipped(mocked_poller):
+    poller, conduit, anthropic = mocked_poller
+    conduit.human_commenter_phids.return_value = {"PHID-USER-bob"}
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(_rev(), group, dry_run=True)
+    assert result.posted is False
+    assert result.skipped_reason == "already_commented"
+    # latest_diff is fetched (we need diff_phid for the dedup check before
+    # this skip), but raw_diff fetch and scoring must not happen.
+    conduit.get_raw_diff.assert_not_called()
+    anthropic.messages.create.assert_not_called()
+    conduit.post_comment.assert_not_called()
+
+
+def test_revision_already_reviewed_by_qreviews_is_skipped(mocked_poller):
+    poller, conduit, anthropic = mocked_poller
+    # Pre-seed the store: qreviews has already posted on a prior diff of
+    # this revision.
+    rev = _rev()
+    poller.store.record_seen(
+        revision_phid=rev.phid,
+        diff_phid="PHID-DIFF-prior",
+        diff_id=99,
+        revision_id=rev.id,
+        group_slug="ip-protection-reviewers",
+        title=rev.title,
+        author_phid=rev.author_phid,
+        revision_created_at=rev.date_created,
+    )
+    poller.store.record_reviewed(
+        revision_phid=rev.phid,
+        diff_phid="PHID-DIFF-prior",
+        review_body="prior review",
+        model="claude-sonnet-4-6",
+        usage={},
+        posted=True,
+    )
+    # New diff appears on the same revision.
+    conduit.latest_diff.return_value = _diff(diff_id=2, revision_phid=rev.phid)
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(rev, group, dry_run=True)
+    assert result.posted is False
+    assert result.skipped_reason == "already_reviewed_by_qreviews"
+    # DB short-circuits before the conduit comment-lookup call.
+    conduit.human_commenter_phids.assert_not_called()
     conduit.get_raw_diff.assert_not_called()
     anthropic.messages.create.assert_not_called()
     conduit.post_comment.assert_not_called()
