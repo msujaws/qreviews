@@ -267,6 +267,9 @@ sharing one SQLite file on a persistent volume. `railway.json` and
    - `ANTHROPIC_API_KEY` and `PHABRICATOR_API_TOKEN` (required secrets).
    - `QREVIEWS_DB_PATH=/data/qreviews.db` (points SQLite at the volume).
    - `QREVIEWS_POLL_INTERVAL_SECONDS=3600` (hourly polling).
+   - `QREVIEWS_DASHBOARD_URL=https://qreviews-production.up.railway.app`
+     (optional — when set, advisory comments posted to Phabricator link
+     back to this URL so reviewers can see live metrics).
 3. **Generate a public domain** under Settings → Networking. The dashboard
    contents are not sensitive; only the API keys above are.
 
