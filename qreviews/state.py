@@ -141,6 +141,18 @@ class Store:
         )
         return cur.fetchone() is not None
 
+    def already_posted_on_revision(self, revision_phid: str) -> bool:
+        """True if qreviews has posted a comment on any diff of this revision.
+
+        Enforces the "one review per revision" invariant: even if the author
+        pushes a new diff, we should not re-review.
+        """
+        cur = self.connect().execute(
+            "SELECT 1 FROM reviewed WHERE revision_phid=? AND posted=1 LIMIT 1",
+            (revision_phid,),
+        )
+        return cur.fetchone() is not None
+
     # ------------------------------------------------------------ writes
 
     def record_seen(

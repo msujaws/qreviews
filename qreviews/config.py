@@ -16,6 +16,10 @@ class PhabricatorConfig(BaseModel):
     user_agent: str = "qreviews-bot/0.1"
     watermark_overlap_seconds: int = 60
     max_diff_bytes: int = 200_000
+    # PHIDs of non-application bots whose comments should not count as human
+    # engagement (Lando, BMO-bot, internal CI, etc.). Herald and other
+    # PHID-APPL-* application transactions are filtered automatically.
+    ignore_commenter_phids: list[str] = Field(default_factory=list)
 
     @field_validator("base_url")
     @classmethod

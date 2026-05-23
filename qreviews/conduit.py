@@ -331,11 +331,41 @@ class ConduitClient:
         """Phabricator `conduit.ping` — returns the server hostname when healthy."""
         return self.call("conduit.ping")
 
-    def get_revision_comments(self, revision_id: int) -> list[dict[str, Any]]:
-        """Fetch transaction history for a revision (for tracking human responses)."""
+    def human_commenter_phids(
+        self,
+        revision_id: int,
+        *,
+        author_phid: str,
+        ignore_phids: set[str] | None = None,
+    ) -> set[str]:
+        """Return PHIDs of non-author, non-application users who have left a
+        comment (top-level or inline) on D<revision_id>.
+
+        Filters out:
+        - the revision's own author
+        - any `authorPHID` starting with `PHID-APPL-` (Phabricator marks
+          application-issued transactions like Herald with this prefix)
+        - any PHID in `ignore_phids` (caller-supplied bot allowlist)
+        - transactions whose `comments` array is empty (deleted/placeholder)
+        """
+        ignore = ignore_phids or set()
         params = {
             "objectIdentifier": f"D{revision_id}",
             "limit": 100,
         }
         result = self.call("transaction.search", params)
-        return result.get("data", [])
+        commenters: set[str] = set()
+        for tx in result.get("data", []) or []:
+            if tx.get("type") not in ("comment", "inline"):
+                continue
+            if not tx.get("comments"):
+                continue
+            phid = tx.get("authorPHID") or ""
+            if not phid or phid == author_phid:
+                continue
+            if phid.startswith("PHID-APPL-"):
+                continue
+            if phid in ignore:
+                continue
+            commenters.add(phid)
+        return commenters

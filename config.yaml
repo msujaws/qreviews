@@ -7,6 +7,12 @@ phabricator:
   watermark_overlap_seconds: 60
   # Don't try to score/review revisions whose raw diff exceeds this size.
   max_diff_bytes: 200000
+  # PHIDs of non-application bots whose comments should not count as human
+  # engagement. Herald and other PHID-APPL-* transactions are filtered
+  # automatically; this list is for user-PHID bots like Lando, BMO-bot, etc.
+  # ignore_commenter_phids:
+  #   - PHID-USER-landobot
+  #   - PHID-USER-bmobot
 
 anthropic:
   # Cheap model for the scoring gate. Keep this fast and inexpensive.

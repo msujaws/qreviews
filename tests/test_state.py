@@ -103,6 +103,38 @@ def test_record_reviewed_posted_path(store: Store):
     assert "Looks good" in row["review_body"]
 
 
+def test_already_posted_on_revision(store: Store):
+    # No rows yet → False.
+    assert store.already_posted_on_revision("PHID-DREV-1") is False
+
+    # A seen-but-not-posted row → still False.
+    store.record_seen(
+        revision_phid="PHID-DREV-1",
+        diff_phid="PHID-DIFF-1",
+        diff_id=1,
+        revision_id=100,
+        group_slug="ip-protection-reviewers",
+        title="t",
+        author_phid="PHID-USER-1",
+        revision_created_at=1000,
+    )
+    assert store.already_posted_on_revision("PHID-DREV-1") is False
+
+    # Mark it posted → True.
+    store.record_reviewed(
+        revision_phid="PHID-DREV-1",
+        diff_phid="PHID-DIFF-1",
+        review_body="body",
+        model="claude-sonnet-4-6",
+        usage={},
+        posted=True,
+    )
+    assert store.already_posted_on_revision("PHID-DREV-1") is True
+
+    # Different revision is unaffected.
+    assert store.already_posted_on_revision("PHID-DREV-2") is False
+
+
 def test_event_log_grows(store: Store):
     store.record_seen(
         revision_phid="PHID-DREV-1",

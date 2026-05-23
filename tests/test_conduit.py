@@ -176,6 +176,77 @@ def test_retry_after_on_429(fake_session, monkeypatch):
     assert 0.0 in sleeps  # honored Retry-After: 0
 
 
+def _tx(
+    *,
+    type: str = "comment",
+    author: str = "PHID-USER-x",
+    with_comment: bool = True,
+) -> dict:
+    return {
+        "type": type,
+        "authorPHID": author,
+        "comments": [{"content": {"raw": "hi"}}] if with_comment else [],
+    }
+
+
+def test_human_commenter_phids_filters_author_apps_and_ignored(fake_session):
+    fake_session.post.return_value = _ok_response(
+        {
+            "data": [
+                # Author's own comment — filtered.
+                _tx(author="PHID-USER-author"),
+                # Herald (application) — filtered by PHID-APPL- prefix.
+                _tx(author="PHID-APPL-PhabricatorHeraldApplication"),
+                # In ignore list — filtered.
+                _tx(author="PHID-USER-landobot"),
+                # Empty comments array — filtered.
+                _tx(author="PHID-USER-deletedcomment", with_comment=False),
+                # Status-change transaction (not a comment) — filtered.
+                {"type": "status", "authorPHID": "PHID-USER-other", "comments": []},
+                # Real reviewer comment — kept.
+                _tx(author="PHID-USER-alice"),
+                # Real reviewer inline comment — kept (different author).
+                _tx(type="inline", author="PHID-USER-bob"),
+                # Duplicate reviewer comment — still just one PHID.
+                _tx(author="PHID-USER-alice"),
+            ]
+        }
+    )
+    c = _make_client(fake_session)
+    result = c.human_commenter_phids(
+        555,
+        author_phid="PHID-USER-author",
+        ignore_phids={"PHID-USER-landobot"},
+    )
+    assert result == {"PHID-USER-alice", "PHID-USER-bob"}
+
+
+def test_human_commenter_phids_empty_when_only_author_and_herald(fake_session):
+    fake_session.post.return_value = _ok_response(
+        {
+            "data": [
+                _tx(author="PHID-USER-author"),
+                _tx(author="PHID-APPL-PhabricatorHeraldApplication"),
+            ]
+        }
+    )
+    c = _make_client(fake_session)
+    assert (
+        c.human_commenter_phids(555, author_phid="PHID-USER-author") == set()
+    )
+
+
+def test_human_commenter_phids_sends_correct_params(fake_session):
+    fake_session.post.return_value = _ok_response({"data": []})
+    c = _make_client(fake_session)
+    c.human_commenter_phids(555, author_phid="PHID-USER-author")
+    args, kwargs = fake_session.post.call_args
+    assert args[0] == "https://phab.example.test/api/transaction.search"
+    data = kwargs["data"]
+    assert ("objectIdentifier", "D555") in data
+    assert ("limit", "100") in data
+
+
 def test_diff_from_search_result():
     d = Diff.from_search_result(
         {"phid": "PHID-DIFF-7", "id": 7, "fields": {"revisionPHID": "PHID-DREV-1", "dateCreated": 1}}
