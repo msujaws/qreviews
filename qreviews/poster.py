@@ -31,8 +31,10 @@ This revision was auto-reviewed because its automated **risk** and **complexity*
 {review_body}
 
 ---
-*Posted by `qreviews` (review model: `{review_model}`). This is **advisory only** and does not replace human review. Reply with `/qreviews false-positive` to flag a bad call.*
+*Posted by [qreviews]({source_url}) — an unofficial, non-blocking advisory review bot that uses Anthropic's Claude to score risk/complexity and draft low-risk reviews (review model: `{review_model}`). **Advisory only** — it does not accept, reject, or request changes.{dashboard_sentence} Reply with `/qreviews false-positive` to flag a bad call.*
 """
+
+SOURCE_URL = "https://github.com/msujaws/qreviews"
 
 
 @dataclass
@@ -54,7 +56,11 @@ def render_comment(
     review_body: str,
     review_model: str,
     threshold: int,
+    dashboard_url: str | None = None,
 ) -> RenderedComment:
+    dashboard_sentence = (
+        f" Live metrics & per-revision details: <{dashboard_url}>." if dashboard_url else ""
+    )
     body = COMMENT_TEMPLATE.format(
         threshold=threshold,
         risk=scores.risk,
@@ -63,6 +69,8 @@ def render_comment(
         complexity_bullets=_bulletize(scores.complexity_factors),
         review_body=review_body.strip(),
         review_model=review_model,
+        source_url=SOURCE_URL,
+        dashboard_sentence=dashboard_sentence,
     )
     return RenderedComment(revision_phid=revision_phid, body=body)
 

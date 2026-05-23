@@ -48,3 +48,33 @@ def test_enabled_groups(config: Config):
     enabled = config.enabled_groups()
     assert len(enabled) == 1
     assert enabled[0].slug == "ip-protection-reviewers"
+
+
+def test_dashboard_public_url_env_override(tmp_path, monkeypatch):
+    """QREVIEWS_DASHBOARD_URL overrides dashboard.public_url at load time."""
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(
+        "phabricator:\n"
+        "  base_url: https://phab.example.test/api/\n"
+        "anthropic:\n"
+        "  scoring_model: claude-haiku-4-5\n"
+        "  review_model: claude-sonnet-4-6\n"
+    )
+    monkeypatch.setenv("QREVIEWS_DASHBOARD_URL", "https://qreviews.example")
+    cfg = load_config(cfg_path)
+    assert cfg.dashboard.public_url == "https://qreviews.example"
+
+
+def test_dashboard_public_url_defaults_none(tmp_path, monkeypatch):
+    """Without the env var or yaml field, public_url stays None."""
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(
+        "phabricator:\n"
+        "  base_url: https://phab.example.test/api/\n"
+        "anthropic:\n"
+        "  scoring_model: claude-haiku-4-5\n"
+        "  review_model: claude-sonnet-4-6\n"
+    )
+    monkeypatch.delenv("QREVIEWS_DASHBOARD_URL", raising=False)
+    cfg = load_config(cfg_path)
+    assert cfg.dashboard.public_url is None

@@ -38,6 +38,10 @@ class Defaults(BaseModel):
 class DashboardConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8765
+    # Optional. When set, posted Phabricator comments include a link back to
+    # this URL so reviewers can see live metrics for the bot. Override at
+    # deploy time via the QREVIEWS_DASHBOARD_URL env var.
+    public_url: str | None = None
 
 
 class StorageConfig(BaseModel):
@@ -99,6 +103,8 @@ def load_config(config_path: str | Path = "config.yaml") -> Config:
         raw.setdefault("storage", {})["db_path"] = env_db
     if env_interval := os.environ.get("QREVIEWS_POLL_INTERVAL_SECONDS"):
         raw.setdefault("phabricator", {})["poll_interval_seconds"] = int(env_interval)
+    if env_url := os.environ.get("QREVIEWS_DASHBOARD_URL"):
+        raw.setdefault("dashboard", {})["public_url"] = env_url
 
     return Config.model_validate(raw)
 

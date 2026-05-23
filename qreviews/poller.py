@@ -238,6 +238,7 @@ class Poller:
             review_body=review.body,
             review_model=review.model,
             threshold=max(risk_threshold, complexity_threshold),
+            dashboard_url=self.config.dashboard.public_url,
         )
 
         posted = post_comment(self.conduit, rendered=rendered, dry_run=dry_run)
