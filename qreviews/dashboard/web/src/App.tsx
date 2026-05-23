@@ -6,6 +6,7 @@ import { HistogramChart } from "./components/HistogramChart";
 import { RevisionsTable } from "./components/RevisionsTable";
 import { RevisionDrawer } from "./components/RevisionDrawer";
 import { Eyebrow } from "./components/Eyebrow";
+import { HowItWorks } from "./components/HowItWorks";
 import { useDashboardData } from "./hooks/useDashboardData";
 
 const DEFAULT_RISK = 3;
@@ -28,6 +29,10 @@ export function App() {
       <main className="mx-auto max-w-[1280px] px-8 py-12 flex flex-col gap-16">
         <SectionWrap label="overview · summary">
           <KpiRow summary={summary.data} />
+        </SectionWrap>
+
+        <SectionWrap label="manual · how it works">
+          <HowItWorks />
         </SectionWrap>
 
         <SectionWrap label="signal · over time">
@@ -76,7 +81,11 @@ function Footer() {
   const linkCls =
     "text-[var(--pt-ink)] hover:text-[var(--pt-flame)] transition-colors border-b border-dotted border-[var(--pt-hairline)] hover:border-[var(--pt-flame)]";
   return (
-    <footer className="mt-12 pt-8 border-t border-[var(--pt-hairline)] flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between gap-y-3">
+    <footer className="mt-12 pt-8 border-t border-[var(--pt-hairline)] flex flex-col gap-3">
+      <div className="pt-mono text-[11px] text-[var(--pt-muted)] tracking-[0.06em]">
+        unofficial · not an official mozilla product
+      </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between gap-y-3">
       <div className="pt-mono text-[11px] text-[var(--pt-muted)] tracking-[0.06em]">
         polling · sqlite · wal · refreshes every 30s
       </div>
@@ -98,6 +107,7 @@ function Footer() {
       </div>
       <div className="pt-mono text-[10px] text-[var(--pt-muted)] uppercase tracking-[0.16em]">
         qualreviews · ↘
+      </div>
       </div>
     </footer>
   );
