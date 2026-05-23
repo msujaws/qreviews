@@ -39,7 +39,7 @@ export function HistogramChart({ data, riskThreshold, complexityThreshold }: Pro
           textColor="var(--pt-muted)"
           tickLine="none"
           series={[
-            { name: "risk", color: "var(--pt-danger)" },
+            { name: "risk", color: "var(--pt-info)" },
             { name: "complexity", color: "var(--pt-flame)" },
           ]}
           tooltipProps={{

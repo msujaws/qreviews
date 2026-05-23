@@ -53,7 +53,9 @@ export const theme = createTheme({
     surface: "#121A2B",
     surfaceRaised: "#172037",
     hairline: "rgba(232, 236, 244, 0.08)",
+    ok: "#3DDC97",
     warn: "#F2C94C",
-    danger: "#E0524A",
+    danger: "#F59E0B",
+    info: "#5B9EFF",
   },
 });
