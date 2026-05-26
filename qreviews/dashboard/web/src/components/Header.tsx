@@ -31,7 +31,9 @@ export function Header({ groups, selected, onChange }: Props) {
               QualReviews
             </h1>
             <div className="pt-mono text-[13px] text-[var(--pt-muted)] mt-2">
-              autonomous phabricator review bot
+              agentic, autonomous phabricator review bot
+              <span className="mx-2 text-[var(--pt-hairline)]">·</span>
+              gated AI code review for mozilla
             </div>
           </div>
         </div>

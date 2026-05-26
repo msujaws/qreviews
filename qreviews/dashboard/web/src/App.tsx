@@ -7,6 +7,7 @@ import { RevisionsTable } from "./components/RevisionsTable";
 import { RevisionDrawer } from "./components/RevisionDrawer";
 import { Eyebrow } from "./components/Eyebrow";
 import { HowItWorks } from "./components/HowItWorks";
+import { Premise } from "./components/Premise";
 import { useDashboardData } from "./hooks/useDashboardData";
 
 const DEFAULT_RISK = 3;
@@ -27,6 +28,10 @@ export function App() {
       <Header groups={groups.data} selected={group} onChange={setGroup} />
 
       <main className="mx-auto max-w-[1280px] px-8 py-12 flex flex-col gap-16">
+        <SectionWrap label="premise · why qreviews exists">
+          <Premise />
+        </SectionWrap>
+
         <SectionWrap label="overview · summary">
           <KpiRow summary={summary.data} />
         </SectionWrap>
