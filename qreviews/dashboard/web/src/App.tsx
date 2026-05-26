@@ -6,8 +6,7 @@ import { HistogramChart } from "./components/HistogramChart";
 import { RevisionsTable } from "./components/RevisionsTable";
 import { RevisionDrawer } from "./components/RevisionDrawer";
 import { Eyebrow } from "./components/Eyebrow";
-import { HowItWorks } from "./components/HowItWorks";
-import { Premise } from "./components/Premise";
+import { WhyAndHow } from "./components/WhyAndHow";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useGroupParam } from "./hooks/useGroupParam";
 
@@ -29,17 +28,11 @@ export function App() {
       <Header groups={groups.data} selected={group} onChange={setGroup} />
 
       <main className="mx-auto max-w-[1280px] px-8 py-12 flex flex-col gap-16">
-        <SectionWrap label="premise · why qreviews exists">
-          <Premise />
-        </SectionWrap>
-
         <SectionWrap label="overview · summary">
           <KpiRow summary={summary.data} />
         </SectionWrap>
 
-        <SectionWrap label="manual · how it works">
-          <HowItWorks />
-        </SectionWrap>
+        <WhyAndHow />
 
         <SectionWrap label="signal · over time">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -93,7 +86,7 @@ function Footer() {
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between gap-y-3">
       <div className="pt-mono text-[11px] text-[var(--pt-muted)] tracking-[0.06em]">
-        polling · sqlite · wal · refreshes every 30s
+        polling · sqlite · wal · refreshes hourly
       </div>
       <div className="pt-mono text-[11px] text-[var(--pt-muted)] tracking-[0.06em]">
         created with <span style={{ color: "var(--pt-flame)" }}>♥</span> by Jared Wein
