@@ -1,0 +1,23 @@
+# Augments nixpacks' auto-detected Python build to install searchfox-cli,
+# which qreviews/review.py calls into during reviews for cross-reference
+# lookups against mozilla-central (find_definition, find_callers, etc.).
+#
+# Upstream (padenot/searchfox-cli) ships static x86_64-linux prebuilts, so
+# we download the tarball rather than installing the Rust toolchain — much
+# faster builds, much smaller image, no compile step.
+#
+# The "..." entries are the documented nixpacks sentinel for "splice in the
+# auto-detected values here" — they preserve the Python install commands
+# nixpacks generates from pyproject.toml.
+
+[phases.setup]
+nixPkgs = ["...", "curl", "gnutar", "gzip"]
+
+[phases.install]
+cmds = [
+  "...",
+  "curl -fsSL https://github.com/padenot/searchfox-cli/releases/download/v0.13.0/searchfox-cli-0.13.0-x86_64-unknown-linux-gnu.tar.gz -o /tmp/sf.tgz",
+  "tar -xzf /tmp/sf.tgz -C /usr/local/bin",
+  "chmod +x /usr/local/bin/searchfox-cli",
+  "rm /tmp/sf.tgz",
+]

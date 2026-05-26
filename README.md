@@ -402,9 +402,10 @@ Logs land at `logs/qreviews.{out,err}`. The agent restarts on crash with a
 ## Deploying to Railway
 
 A single Railway service runs the poller daemon and the dashboard together,
-sharing one SQLite file on a persistent volume. `railway.json` and
-`scripts/railway_start.sh` are committed; Railway autodeploys on push to
-`main`. One-time setup:
+sharing one SQLite file on a persistent volume. `railway.json`,
+`nixpacks.toml` (which pulls in a prebuilt `searchfox-cli` binary at build
+time) and `scripts/railway_start.sh` are committed; Railway autodeploys
+on push to `main`. One-time setup:
 
 1. **Attach a Volume** to the service, mounted at `/data`.
 2. **Set environment variables** in the Railway dashboard:
@@ -444,11 +445,18 @@ The route verifies an HMAC-SHA256 signature in
 ## Searchfox
 
 Reviews call `searchfox-cli` to fetch context from mozilla-central
-(file contents, symbol definitions, call graphs). Install it once with:
+(file contents, symbol definitions, call graphs). For local development,
+install it once with:
 
 ```bash
 cargo install searchfox-cli
 ```
 
-If `searchfox-cli` isn't on `PATH`, reviews still work — they just won't
-have cross-reference superpowers.
+The Railway deploy installs the upstream prebuilt binary automatically via
+`nixpacks.toml`, so nothing needs to be done there. The resolver also
+looks in `~/.cargo/bin`, `~/.local/bin`, `/opt/homebrew/bin`, and
+`/usr/local/bin` when `PATH` is bare (e.g. under launchd).
+
+If `searchfox-cli` isn't found anywhere, reviews still work — they just
+won't have cross-reference superpowers, and the prompt is automatically
+adjusted so the model doesn't promise tool calls it can't make.
