@@ -44,6 +44,9 @@ reviewer_groups:
     enabled: true
     skill_path: skills/ip-protection-review/SKILL.md
     # risk_threshold and complexity_threshold are optional here; omit to inherit defaults.
+    # restrict_to_member_authors defaults to true: automated reviews only run for
+    # revisions whose author is a member of the Phabricator project for this
+    # slug. Set to false to open the group up to external authors.
 
   - slug: home-newtab-reviewers
     enabled: true
