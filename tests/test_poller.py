@@ -229,6 +229,37 @@ def test_revision_authored_by_non_member_is_skipped(mocked_poller):
     conduit.post_comment.assert_not_called()
 
 
+def _project_lookup(group_phid: str = "PHID-PROJ-ip", secure_phid: str = "PHID-PROJ-secure"):
+    """Side-effect resolver mapping slugs to PHIDs so the group resolver and
+    the secure-revision resolver return different values from the same mock."""
+
+    def _side(slug: str) -> str | None:
+        if slug == "secure-revision":
+            return secure_phid
+        return group_phid
+
+    return _side
+
+
+def test_secure_revision_tagged_is_skipped(mocked_poller):
+    poller, conduit, anthropic = mocked_poller
+    conduit.resolve_project_phid.side_effect = _project_lookup()
+
+    tagged = _rev(project_phids=["PHID-PROJ-secure", "PHID-PROJ-other"])
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(tagged, group, dry_run=True)
+
+    assert result.posted is False
+    assert result.skipped_reason == "security_sensitive"
+    # Must short-circuit before any diff/content fetch and before any
+    # Claude call so restricted content never enters our pipeline.
+    conduit.latest_diff.assert_not_called()
+    conduit.get_raw_diff.assert_not_called()
+    conduit.human_commenter_phids.assert_not_called()
+    anthropic.messages.create.assert_not_called()
+    conduit.post_comment.assert_not_called()
+
+
 def test_empty_members_lookup_does_not_skip(mocked_poller):
     """A transient empty members result should not silently drop every revision."""
     poller, conduit, anthropic = mocked_poller
@@ -260,6 +291,47 @@ def test_member_restriction_can_be_disabled(mocked_poller):
     assert result.skipped_reason != "author_not_in_group"
     # Membership lookup should be skipped entirely when the flag is off.
     conduit.project_members.assert_not_called()
+
+
+def test_secure_revision_phid_is_cached_across_calls(mocked_poller):
+    poller, conduit, anthropic = mocked_poller
+    conduit.resolve_project_phid.side_effect = _project_lookup()
+    anthropic.messages.create.return_value = _claude_text(
+        json.dumps({"risk": 5, "complexity": 5, "risk_factors": [], "complexity_factors": []})
+    )
+
+    group = poller.config.enabled_groups()[0]
+    # Two untagged revisions go through the pipeline; the secure-revision
+    # PHID resolves once and is reused on the second call.
+    poller.process_revision(_rev(revision_id=100), group, dry_run=True)
+    poller.process_revision(_rev(revision_id=101), group, dry_run=True)
+
+    secure_calls = [
+        c for c in conduit.resolve_project_phid.call_args_list
+        if c.args and c.args[0] == "secure-revision"
+    ]
+    assert len(secure_calls) == 1
+
+
+def test_unresolvable_secure_revision_slug_does_not_block_reviews(mocked_poller):
+    poller, conduit, anthropic = mocked_poller
+    # Slug doesn't resolve (returns None for secure-revision) — the poller
+    # logs a warning and proceeds with the rest of the pipeline.
+    conduit.resolve_project_phid.side_effect = _project_lookup(secure_phid=None)
+    anthropic.messages.create.side_effect = [
+        _claude_text(json.dumps({
+            "risk": 1, "complexity": 1, "risk_factors": [], "complexity_factors": [],
+        })),
+        _claude_text("### Looks good\n"),
+    ]
+    # Skill needed for the review step on this group.
+    group = poller.config.enabled_groups()[0]
+
+    result = poller.process_revision(_rev(), group, dry_run=True)
+    # Pipeline ran (scoring + review) even though the secure-revision
+    # slug couldn't be resolved.
+    assert result.skipped_reason != "security_sensitive"
+    conduit.latest_diff.assert_called_once()
 
 
 def test_poll_group_advances_watermark(mocked_poller):
@@ -301,6 +373,7 @@ def test_additional_skill_paths_for_excludes_primary(mocked_poller, tmp_path):
         date_modified=0,
         # Both groups tagged on this revision.
         reviewer_phids=["PHID-PROJ-ip", "PHID-PROJ-dt", "PHID-USER-bob"],
+        project_phids=[],
     )
 
     paths = poller.additional_skill_paths_for(rev, primary_phid="PHID-PROJ-ip")

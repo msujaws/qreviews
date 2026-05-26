@@ -54,6 +54,11 @@ class Poller:
         self._supplemental_skills: dict[str, Path] = {}
         self._supplemental_ready = False
         self._group_member_phids: dict[str, set[str]] = {}
+        # Secure-revision PHID is resolved lazily on first process_revision
+        # call. None after resolve = misconfigured slug or transient failure;
+        # we memoize the miss so we don't hammer project.search every poll.
+        self._secure_revision_phid: str | None = None
+        self._secure_revision_resolved = False
 
     # ------------------------------------------------------------ phid resolve
 
@@ -157,6 +162,43 @@ class Poller:
         paths.sort()
         return paths
 
+    def resolve_secure_revision_phid(self) -> str | None:
+        """PHID of Mozilla's `secure-revision` project tag, or None if it
+        can't be resolved.
+
+        Cached for the lifetime of the Poller (and across restarts via
+        Store.get_cached_phid). A failed resolve is logged once and
+        memoized as a miss so we don't hammer project.search every poll.
+        """
+        if self._secure_revision_resolved:
+            return self._secure_revision_phid
+        slug = self.config.phabricator.secure_revision_project_slug
+        cached = self.store.get_cached_phid(slug)
+        if cached:
+            self._secure_revision_phid = cached
+            self._secure_revision_resolved = True
+            return cached
+        try:
+            phid = self.conduit.resolve_project_phid(slug)
+        except Exception:
+            log.exception("failed to resolve secure-revision PHID (slug=%s)", slug)
+            self._secure_revision_resolved = True
+            return None
+        if not phid:
+            log.warning(
+                "secure-revision project slug %r did not resolve; "
+                "security-sensitive revisions will NOT be skipped until "
+                "this is fixed",
+                slug,
+            )
+            self._secure_revision_resolved = True
+            return None
+        self.store.cache_phid(slug, phid)
+        self._secure_revision_phid = phid
+        self._secure_revision_resolved = True
+        log.info("resolved %s → %s", slug, phid)
+        return phid
+
     # ------------------------------------------------------------ per-revision
 
     def process_revision(
@@ -172,6 +214,18 @@ class Poller:
                 revision_id=revision.id,
                 posted=False,
                 skipped_reason="already_accepted",
+            )
+
+        # Security-sensitive revisions (Mozilla's `secure-revision` project
+        # tag) must never reach scoring or review. Bail before fetching the
+        # diff so we don't even pull restricted content into memory.
+        secure_phid = self.resolve_secure_revision_phid()
+        if secure_phid and secure_phid in revision.project_phids:
+            log.info("skipping %s: tagged secure-revision", revision.display_id)
+            return ProcessResult(
+                revision_id=revision.id,
+                posted=False,
+                skipped_reason="security_sensitive",
             )
 
         # Author-membership gate: while qreviews is being validated, only
