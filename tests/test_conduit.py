@@ -213,7 +213,13 @@ def test_search_revisions_parses_response(fake_session):
                                 {"reviewerPHID": "PHID-PROJ-newtab"},
                                 {"reviewerPHID": "PHID-USER-bob"},
                             ]
-                        }
+                        },
+                        "projects": {
+                            "projectPHIDs": [
+                                "PHID-PROJ-newtab",
+                                "PHID-PROJ-secure-revision",
+                            ]
+                        },
                     },
                 }
             ]
@@ -227,6 +233,48 @@ def test_search_revisions_parses_response(fake_session):
     assert r.display_id == "D555"
     assert r.bug_id == "12345"
     assert r.reviewer_phids == ["PHID-PROJ-newtab", "PHID-USER-bob"]
+    assert r.project_phids == ["PHID-PROJ-newtab", "PHID-PROJ-secure-revision"]
+    # Each search variant must request the projects attachment so
+    # process_revision can read project tags off the result.
+    data = fake_session.post.call_args[1]["data"]
+    assert ("attachments[projects]", "true") in data
+    assert ("attachments[reviewers]", "true") in data
+
+
+def test_revision_from_search_result_defaults_project_phids_to_empty():
+    r = Revision.from_search_result(
+        {
+            "phid": "PHID-DREV-2",
+            "id": 999,
+            "fields": {
+                "title": "t",
+                "summary": "",
+                "status": {"value": "needs-review"},
+                "authorPHID": "PHID-USER-1",
+                "dateCreated": 0,
+                "dateModified": 0,
+            },
+            # No attachments at all — defensive default.
+        }
+    )
+    assert r.project_phids == []
+    assert r.reviewer_phids == []
+
+
+def test_search_revisions_by_phids_requests_projects_attachment(fake_session):
+    fake_session.post.return_value = _ok_response({"data": []})
+    c = _make_client(fake_session)
+    c.search_revisions_by_phids(["PHID-DREV-1"])
+    data = fake_session.post.call_args[1]["data"]
+    assert ("attachments[projects]", "true") in data
+
+
+def test_get_revision_by_id_requests_projects_attachment(fake_session):
+    fake_session.post.return_value = _ok_response({"data": []})
+    c = _make_client(fake_session)
+    c.get_revision_by_id(123)
+    data = fake_session.post.call_args[1]["data"]
+    assert ("attachments[projects]", "true") in data
 
 
 def test_get_raw_diff(fake_session):

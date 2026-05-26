@@ -84,6 +84,7 @@ class Revision:
     date_created: int
     date_modified: int
     reviewer_phids: list[str]
+    project_phids: list[str]
 
     @property
     def display_id(self) -> str:
@@ -100,6 +101,8 @@ class Revision:
             phid = r.get("reviewerPHID")
             if phid:
                 reviewers.append(phid)
+        projects_block = attachments.get("projects") or {}
+        project_phids = [p for p in (projects_block.get("projectPHIDs") or []) if p]
         return cls(
             phid=item["phid"],
             id=int(item["id"]),
@@ -112,6 +115,7 @@ class Revision:
             date_created=int(fields.get("dateCreated") or 0),
             date_modified=int(fields.get("dateModified") or 0),
             reviewer_phids=reviewers,
+            project_phids=project_phids,
         )
 
 
@@ -316,7 +320,7 @@ class ConduitClient:
 
         params = {
             "constraints": constraints,
-            "attachments": {"reviewers": True},
+            "attachments": {"reviewers": True, "projects": True},
             "order": "newest",
             "limit": limit,
         }
@@ -329,7 +333,7 @@ class ConduitClient:
             return []
         params = {
             "constraints": {"phids": phid_list},
-            "attachments": {"reviewers": True},
+            "attachments": {"reviewers": True, "projects": True},
             "limit": len(phid_list),
         }
         result = self.call("differential.revision.search", params)
@@ -338,7 +342,7 @@ class ConduitClient:
     def get_revision_by_id(self, revision_id: int) -> Revision | None:
         params = {
             "constraints": {"ids": [int(revision_id)]},
-            "attachments": {"reviewers": True},
+            "attachments": {"reviewers": True, "projects": True},
             "limit": 1,
         }
         result = self.call("differential.revision.search", params)

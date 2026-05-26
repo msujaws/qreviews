@@ -12,7 +12,7 @@ from qreviews.conduit import Diff, Revision
 from qreviews.poller import Poller
 
 
-def _rev(revision_id: int = 100) -> Revision:
+def _rev(revision_id: int = 100, project_phids: list[str] | None = None) -> Revision:
     return Revision(
         phid=f"PHID-DREV-{revision_id}",
         id=revision_id,
@@ -25,6 +25,7 @@ def _rev(revision_id: int = 100) -> Revision:
         date_created=1716000000,
         date_modified=1716000100,
         reviewer_phids=["PHID-PROJ-ip"],
+        project_phids=project_phids or [],
     )
 
 
@@ -150,6 +151,7 @@ def test_already_accepted_revision_is_skipped(mocked_poller):
         date_created=1716000000,
         date_modified=1716000200,
         reviewer_phids=["PHID-PROJ-ip"],
+        project_phids=[],
     )
     group = poller.config.enabled_groups()[0]
     result = poller.process_revision(accepted, group, dry_run=True)

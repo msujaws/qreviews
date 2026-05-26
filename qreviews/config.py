@@ -20,6 +20,11 @@ class PhabricatorConfig(BaseModel):
     # engagement (Lando, BMO-bot, internal CI, etc.). Herald and other
     # PHID-APPL-* application transactions are filtered automatically.
     ignore_commenter_phids: list[str] = Field(default_factory=list)
+    # Project slug that Mozilla uses to mark security-sensitive revisions.
+    # Revisions tagged with this project are skipped entirely — no diff
+    # fetch, no scoring, no review. Exposed as config so a future rename on
+    # Phabricator's side doesn't require a code change.
+    secure_revision_project_slug: str = "secure-revision"
 
     @field_validator("base_url")
     @classmethod

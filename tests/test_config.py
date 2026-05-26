@@ -65,6 +65,33 @@ def test_dashboard_public_url_env_override(tmp_path, monkeypatch):
     assert cfg.dashboard.public_url == "https://qreviews.example"
 
 
+def test_secure_revision_project_slug_default(tmp_path):
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(
+        "phabricator:\n"
+        "  base_url: https://phab.example.test/api/\n"
+        "anthropic:\n"
+        "  scoring_model: claude-haiku-4-5\n"
+        "  review_model: claude-sonnet-4-6\n"
+    )
+    cfg = load_config(cfg_path)
+    assert cfg.phabricator.secure_revision_project_slug == "secure-revision"
+
+
+def test_secure_revision_project_slug_overridable(tmp_path):
+    cfg_path = tmp_path / "config.yaml"
+    cfg_path.write_text(
+        "phabricator:\n"
+        "  base_url: https://phab.example.test/api/\n"
+        "  secure_revision_project_slug: mozilla-secure\n"
+        "anthropic:\n"
+        "  scoring_model: claude-haiku-4-5\n"
+        "  review_model: claude-sonnet-4-6\n"
+    )
+    cfg = load_config(cfg_path)
+    assert cfg.phabricator.secure_revision_project_slug == "mozilla-secure"
+
+
 def test_dashboard_public_url_defaults_none(tmp_path, monkeypatch):
     """Without the env var or yaml field, public_url stays None."""
     cfg_path = tmp_path / "config.yaml"
