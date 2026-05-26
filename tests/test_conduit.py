@@ -105,6 +105,52 @@ def test_resolve_project_phid(fake_session):
     assert c.resolve_project_phid("ip-protection-reviewers") == "PHID-PROJ-abc123"
 
 
+def test_resolve_project_phids_batched(fake_session):
+    fake_session.post.return_value = _ok_response(
+        {
+            "data": [
+                {"phid": "PHID-PROJ-a", "fields": {"slug": "alpha-reviewers"}},
+                {"phid": "PHID-PROJ-b", "fields": {"slug": "beta-reviewers"}},
+            ]
+        }
+    )
+    c = _make_client(fake_session)
+    out = c.resolve_project_phids(["alpha-reviewers", "beta-reviewers"])
+    assert out == {
+        "alpha-reviewers": "PHID-PROJ-a",
+        "beta-reviewers": "PHID-PROJ-b",
+    }
+    # One batched call, no fallback needed.
+    assert fake_session.post.call_count == 1
+    _, kwargs = fake_session.post.call_args
+    data = kwargs["data"]
+    assert ("constraints[slugs][0]", "alpha-reviewers") in data
+    assert ("constraints[slugs][1]", "beta-reviewers") in data
+
+
+def test_resolve_project_phids_falls_back_for_unmatched(fake_session):
+    # First call: batch search returns alpha but not gamma (e.g. gamma
+    # is a secondary hashtag, not a primary slug).
+    batch_response = _ok_response(
+        {"data": [{"phid": "PHID-PROJ-a", "fields": {"slug": "alpha-reviewers"}}]}
+    )
+    # Second call: per-slug fallback for gamma succeeds.
+    gamma_response = _ok_response({"data": [{"phid": "PHID-PROJ-g"}]})
+    fake_session.post.side_effect = [batch_response, gamma_response]
+    c = _make_client(fake_session)
+    out = c.resolve_project_phids(["alpha-reviewers", "gamma-reviewers"])
+    assert out == {
+        "alpha-reviewers": "PHID-PROJ-a",
+        "gamma-reviewers": "PHID-PROJ-g",
+    }
+    assert fake_session.post.call_count == 2
+
+
+def test_resolve_project_phids_empty():
+    c = _make_client(MagicMock(spec=requests.Session, headers={}))
+    assert c.resolve_project_phids([]) == {}
+
+
 def test_search_revisions_parses_response(fake_session):
     fake_session.post.return_value = _ok_response(
         {

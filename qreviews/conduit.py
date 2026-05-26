@@ -248,6 +248,39 @@ class ConduitClient:
             return None
         return data[0].get("phid")
 
+    def resolve_project_phids(self, slugs: Iterable[str]) -> dict[str, str]:
+        """Resolve multiple project slugs to PHIDs.
+
+        Tries a single batched `project.search` first and matches results by
+        `fields.slug` (Phabricator's primary slug). For input slugs that
+        don't appear as a primary slug in the response — they may be
+        secondary hashtags — falls back to one `resolve_project_phid` call
+        per unmatched slug. Slugs with no matching project are omitted.
+        """
+        slug_list = list(dict.fromkeys(s for s in slugs if s))
+        if not slug_list:
+            return {}
+        result = self.call(
+            "project.search",
+            {"constraints": {"slugs": slug_list}, "limit": len(slug_list)},
+        )
+        data = result.get("data") or []
+        by_slug: dict[str, str] = {}
+        wanted = set(slug_list)
+        for item in data:
+            phid = item.get("phid")
+            fields = item.get("fields") or {}
+            primary = fields.get("slug")
+            if phid and primary and primary in wanted:
+                by_slug[primary] = phid
+        for slug in slug_list:
+            if slug in by_slug:
+                continue
+            phid = self.resolve_project_phid(slug)
+            if phid:
+                by_slug[slug] = phid
+        return by_slug
+
     # ------------------------------------------------------------ revisions
 
     def search_revisions(
