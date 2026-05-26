@@ -1,6 +1,6 @@
 phabricator:
   base_url: https://phabricator.services.mozilla.com/api/
-  poll_interval_seconds: 180
+  poll_interval_seconds: 3600
   user_agent: "qreviews-bot/0.1 (jwein@mozilla.com)"
   # When polling, look back this many seconds before the last watermark so
   # nothing slips through a race window.

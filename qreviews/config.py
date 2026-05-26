@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class PhabricatorConfig(BaseModel):
     base_url: str
-    poll_interval_seconds: int = 180
+    poll_interval_seconds: int = 3600
     user_agent: str = "qreviews-bot/0.1"
     watermark_overlap_seconds: int = 60
     max_diff_bytes: int = 200_000
