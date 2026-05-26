@@ -403,9 +403,8 @@ Logs land at `logs/qreviews.{out,err}`. The agent restarts on crash with a
 
 A single Railway service runs the poller daemon and the dashboard together,
 sharing one SQLite file on a persistent volume. `railway.json`,
-`nixpacks.toml` (which pulls in a prebuilt `searchfox-cli` binary at build
-time) and `scripts/railway_start.sh` are committed; Railway autodeploys
-on push to `main`. One-time setup:
+`nixpacks.toml`, and `scripts/railway_start.sh` are committed; Railway
+autodeploys on push to `main`. One-time setup:
 
 1. **Attach a Volume** to the service, mounted at `/data`.
 2. **Set environment variables** in the Railway dashboard:
@@ -452,11 +451,8 @@ install it once with:
 cargo install searchfox-cli
 ```
 
-The Railway deploy installs the upstream prebuilt binary automatically via
-`nixpacks.toml`, so nothing needs to be done there. The resolver also
-looks in `~/.cargo/bin`, `~/.local/bin`, `/opt/homebrew/bin`, and
-`/usr/local/bin` when `PATH` is bare (e.g. under launchd).
+The Railway deploy installs it automatically via `nixpacks.toml`; locally,
+the resolver also falls back to common bin dirs (`~/.cargo/bin` etc.) when
+`PATH` is bare.
 
-If `searchfox-cli` isn't found anywhere, reviews still work — they just
-won't have cross-reference superpowers, and the prompt is automatically
-adjusted so the model doesn't promise tool calls it can't make.
+If `searchfox-cli` isn't found, reviews still run from the diff alone.
