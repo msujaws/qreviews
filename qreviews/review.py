@@ -23,13 +23,13 @@ from typing import Any
 
 from anthropic import Anthropic
 
-from qreviews.searchfox import TOOL_SCHEMAS, execute_tool
+from qreviews.searchfox import TOOL_SCHEMAS, execute_tool, has_searchfox
 from qreviews.skills import load_skill
 
 log = logging.getLogger(__name__)
 
 
-REVIEW_WRAPPER = """\
+REVIEW_INTRO = """\
 You are reviewing a Mozilla Firefox patch on Phabricator on behalf of an
 overloaded human reviewer group. Below is durable, area-specific guidance you
 must apply. The patch was already gated as LOW RISK and LOW COMPLEXITY, so
@@ -43,6 +43,12 @@ your review should focus on:
   - Cite all findings using the form `path/to/file.ext:LINE` so reviewers can
     jump to them.
 
+"""
+
+# Included only when searchfox-cli is actually available. If we advertise the
+# tools but they fail at runtime, Claude apologises in the review body — and
+# that apology gets posted to Phabricator. See has_searchfox() probe below.
+REVIEW_TOOL_GUIDANCE = """\
 You have searchfox tools that let you read any file in mozilla-central and
 follow symbols. Use them BEFORE flagging something as a potential issue.
 Specifically:
@@ -58,6 +64,9 @@ You don't need to use the tools for every finding — only when verifying
 something the diff alone can't answer. Aim for 0–5 tool calls per review;
 more than that and you're probably exploring rather than reviewing.
 
+"""
+
+REVIEW_OUTRO = """\
 Format your final output as GitHub-flavored Markdown suitable for posting as
 a Phabricator comment. Use level-3 headings (###) for sections. Keep it under
 500 words. Do NOT include scores, do NOT say "I approve" or "looks good to
@@ -147,8 +156,18 @@ def generate_review(
     max_iterations: int = MAX_TOOL_ITERATIONS,
     enable_tools: bool = True,
 ) -> ReviewResult:
+    if enable_tools and not has_searchfox():
+        log.warning(
+            "searchfox-cli not found; reviewing D%d without tool use", revision_id
+        )
+        enable_tools = False
+
     skill_body = load_skill(skill_path)
-    system_text = REVIEW_WRAPPER + skill_body
+    system_parts = [REVIEW_INTRO]
+    if enable_tools:
+        system_parts.append(REVIEW_TOOL_GUIDANCE)
+    system_parts.extend([REVIEW_OUTRO, skill_body])
+    system_text = "".join(system_parts)
     if additional_skill_paths:
         supplemental_bodies = [load_skill(p) for p in additional_skill_paths]
         system_text += SUPPLEMENTAL_SKILLS_HEADER + "\n\n---\n\n".join(supplemental_bodies)

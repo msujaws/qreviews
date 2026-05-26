@@ -1,4 +1,11 @@
-"""generate_review() prompt assembly — primary + supplemental skills."""
+"""generate_review() prompt assembly — primary + supplemental skills, and
+tool-availability gating.
+
+The gating tests guard against the regression that produced D302271 /
+D302524: the prompt promised "searchfox tools" even when searchfox-cli
+wasn't installed at runtime, so Claude tried a tool call, got an error,
+and apologised in the public review body.
+"""
 
 from __future__ import annotations
 
@@ -85,3 +92,81 @@ def test_generate_review_appends_supplemental_bodies(tmp_path: Path):
     assert system_text.index("PRIMARY GUIDANCE BODY") < system_text.index(
         "Additional reviewer-group context"
     )
+
+
+def test_prompt_omits_searchfox_when_unavailable(mocker, tmp_path: Path):
+    primary = _write_skill(tmp_path / "primary.md", "PRIMARY GUIDANCE")
+    mocker.patch("qreviews.review.has_searchfox", return_value=False)
+    client = MagicMock()
+    client.messages.create.return_value = _claude_response("ok")
+
+    generate_review(
+        client,
+        model="claude-test",
+        max_tokens=128,
+        skill_path=primary,
+        title="t",
+        summary="s",
+        revision_id=1,
+        author_phid="PHID-USER-1",
+        bug_id=None,
+        raw_diff="@@",
+    )
+
+    sent = client.messages.create.call_args.kwargs
+    system_text = sent["system"][0]["text"]
+    assert "searchfox" not in system_text.lower()
+    assert "find_definition" not in system_text
+    assert "tools" not in sent  # no tools param sent to the API
+
+
+def test_prompt_includes_searchfox_when_available(mocker, tmp_path: Path):
+    primary = _write_skill(tmp_path / "primary.md", "PRIMARY GUIDANCE")
+    mocker.patch("qreviews.review.has_searchfox", return_value=True)
+    client = MagicMock()
+    client.messages.create.return_value = _claude_response("ok")
+
+    generate_review(
+        client,
+        model="claude-test",
+        max_tokens=128,
+        skill_path=primary,
+        title="t",
+        summary="s",
+        revision_id=1,
+        author_phid="PHID-USER-1",
+        bug_id=None,
+        raw_diff="@@",
+    )
+
+    sent = client.messages.create.call_args.kwargs
+    system_text = sent["system"][0]["text"]
+    assert "searchfox" in system_text.lower()
+    assert "find_definition" in system_text
+    assert sent.get("tools") is not None
+
+
+def test_explicit_enable_tools_false_skips_probe(mocker, tmp_path: Path):
+    """Caller can force tool-less mode even when searchfox would resolve."""
+    primary = _write_skill(tmp_path / "primary.md", "PRIMARY GUIDANCE")
+    probe = mocker.patch("qreviews.review.has_searchfox", return_value=True)
+    client = MagicMock()
+    client.messages.create.return_value = _claude_response("ok")
+
+    generate_review(
+        client,
+        model="claude-test",
+        max_tokens=128,
+        skill_path=primary,
+        title="t",
+        summary="s",
+        revision_id=1,
+        author_phid="PHID-USER-1",
+        bug_id=None,
+        raw_diff="@@",
+        enable_tools=False,
+    )
+
+    probe.assert_not_called()
+    system_text = client.messages.create.call_args.kwargs["system"][0]["text"]
+    assert "searchfox" not in system_text.lower()
