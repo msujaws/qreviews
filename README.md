@@ -2,37 +2,37 @@
 
 **Autonomous, gated AI code review for Mozilla Phabricator.** qreviews
 watches `phabricator.services.mozilla.com` for new revisions tagged with
-specific reviewer groups, scores each one for risk and complexity, and —
-only when both scores are low — posts an advisory review comment generated
-by a tailored Claude skill so a human reviewer can ratify it quickly.
+specific reviewer groups, scores each one for risk and complexity, and
+posts an advisory review comment when both scores are low. The comment
+comes from a tailored Claude skill so a human reviewer can ratify it
+quickly.
 
 ---
 
 ## Why qreviews exists
 
-A few problems show up consistently in review queues for Firefox engineering
-teams (initially Home & New Tab, and IP Protection):
+A few patterns show up consistently in review queues for Firefox
+engineering teams:
 
-- **Engineers worry that AI reviews bias their outcomes.** Opt-in AI review
-  tools can feel like they put a thumb on the scale, and people are right to
-  be skeptical.
-- **Opt-in tools are unevenly used.** A handful of power-users request AI
-  review on every patch; most patches never get one.
-- **Patches sit unreviewed for too long.** The review queue is long enough
-  that even routine changes can wait days.
-- **Complex patches lose attention.** When reviewers are drowning in small,
-  low-risk changes, the patches that actually need careful eyes get less
-  scrutiny than they deserve.
+- **Slow queue.** Patches sit unreviewed for days, even the routine ones.
+- **Lost attention.** When reviewers spend their time on a steady stream
+  of small, low-risk changes, the patches that need careful eyes get less
+  of it.
+- **Routine load.** Most revisions in these queues are small and
+  repetitive. They consume reviewer time before the harder patches get
+  looked at.
+- **Fresh-eyes gap.** Routine patches rarely get a careful second pass,
+  because reviewers are saving their focus for the harder ones.
 
-qreviews' answer is a narrower one than "AI reviews everything." It only
-acts on revisions that score low on both **risk** and **complexity**, posts
-a non-binding advisory comment, and leaves the formal accept/reject decision
-to a human. The goal is to clear the easy queue so reviewers can spend their
-attention on the hard stuff — not to replace human judgment.
+qreviews acts only on revisions that score low on both **risk** and
+**complexity**. It posts a non-binding advisory comment. A human reviewer
+still makes the formal accept or reject call. The goal is to clear the
+easy queue so reviewers can spend their attention on the patches that
+need it.
 
-As the rubric improves and teams get comfortable, we raise the thresholds,
-and eventually open the bot up to revisions from outside the immediate
-review group. The bot never blocks, never accepts, and never rejects.
+As the rubric improves and teams get comfortable, thresholds rise. The
+bot eventually opens up to revisions from outside the immediate review
+group. It never blocks, never accepts, and never rejects.
 
 ---
 
@@ -43,7 +43,7 @@ flowchart LR
   Phab[Phabricator<br/>revisions]
   Poll[qreviews poller<br/>hourly]
   Score{Score with Claude Haiku<br/>risk & complexity}
-  Skip[Skip — log only]
+  Skip[Skip, log only]
   Review[Review with Claude Sonnet<br/>+ searchfox tools]
   Searchfox[(mozilla-central<br/>via searchfox-cli)]
   Post[Post advisory comment<br/>comment transaction only]
@@ -99,19 +99,19 @@ against a SQLite file on a persistent volume. Railway autodeploys from
 `main`.
 
 It polls Phabricator **hourly** (the repo default). Push-based triggering
-via Herald webhooks is wired up in code but not yet enabled in production —
-see [Next steps](#next-steps).
+via Herald webhooks is wired up in code but not yet enabled in production.
+See [Next steps](#next-steps).
 
 **Phabricator access.** qreviews authenticates with a Conduit API token
 scoped to a dedicated bot account. The read surface is:
 
-- `project.search` — resolve reviewer-group slugs to PHIDs and enumerate
+- `project.search`: resolve reviewer-group slugs to PHIDs and enumerate
   group members.
-- `differential.revision.search` — find needs-review revisions.
-- `differential.diff.search` and `differential.getrawdiff` — fetch raw
+- `differential.revision.search`: find needs-review revisions.
+- `differential.diff.search` and `differential.getrawdiff`: fetch raw
   diffs.
-- `transaction.search` — detect human engagement on a revision.
-- `conduit.ping` — health check.
+- `transaction.search`: detect human engagement on a revision.
+- `conduit.ping`: health check.
 
 The write surface is exactly one call: `differential.revision.edit` with a
 single `comment` transaction. The bot has no code path that emits `accept`,
@@ -139,15 +139,15 @@ confidence in the bot at low stakes before widening its reach.
 2. **Register the reviewer group** in `config.yaml` with the team's
    Phabricator project slug, point `skill_path` at the new SKILL.md, and
    leave `risk_threshold` / `complexity_threshold` at the defaults (`3`,
-   strictly less than — so only revisions scoring 0/1/2 get auto-reviewed).
+   strictly less than, so only revisions scoring 0/1/2 get auto-reviewed).
    Leave `restrict_to_member_authors: true` (the default) so only revisions
    authored by group members are considered. Run
    `python -m qreviews resolve-phids` to cache the new PHID.
 3. **Watch the dashboard** for a few weeks. Read the posted reviews, tune
    the rubric, raise thresholds as the team gets comfortable.
 4. **Open up to external authors** by setting
-   `restrict_to_member_authors: false` once the team is happy with quality
-   — automated reviews will then apply to any revision sent to the group,
+   `restrict_to_member_authors: false` once the team is happy with quality.
+   Automated reviews will then apply to any revision sent to the group,
    regardless of who authored it.
 
 A human reviewer always formally accepts or rejects; qreviews stays purely
@@ -160,16 +160,16 @@ advisory throughout.
 The "gated AI assistance" pattern qreviews uses for code review extends
 naturally to other parts of the Firefox SDLC. Roughly in priority order:
 
-- **Bug triage** — assist with component routing, severity, and priority on
+- **Bug triage**: assist with component routing, severity, and priority on
   newly filed Bugzilla bugs, with the same low-risk-only gate.
-- **Bug reproduction & regression finding** — drive
+- **Bug reproduction & regression finding**: drive
   [mozregression](https://mozilla.github.io/mozregression/) automatically
   for regressions where the steps to reproduce are unambiguous, and report
   the bisect range back to the bug.
-- **Visual-diff comparison** — use
+- **Visual-diff comparison**: use
   [mozscreenshots](https://wiki.mozilla.org/Firefox/mozscreenshots) to
-  detect and surface UI regressions on candidate patches, again as an
-  advisory signal rather than a blocking check.
+  detect and surface UI regressions on candidate patches, as an advisory
+  signal. It never blocks.
 
 Each of these inherits qreviews' core constraints: only act on the
 clearly-low-risk cases, never block humans, always leave the final
@@ -183,7 +183,7 @@ Concrete near-term work, in roughly the order it's likely to land:
 
 - **Herald push triggers.** Replace hourly polling with Phabricator Herald
   webhooks. The webhook route already exists at `POST /phabricator/herald`
-  and verifies HMAC-SHA256 signatures — what's left is wiring up the Herald
+  and verifies HMAC-SHA256 signatures. What's left is wiring up the Herald
   rule in Phabricator and setting `PHABRICATOR_WEBHOOK_SECRET` in
   production. Faster feedback, lower Conduit load.
 - **Low-quality-review flagging.** Add a dashboard affordance to mark a
@@ -219,8 +219,8 @@ python -m qreviews resolve-phids
 python -m qreviews review D123456
 
 # 6. Or run the polling loop
-python -m qreviews poll --dry-run        # safe — no posts
-python -m qreviews poll                  # live — posts advisory comments
+python -m qreviews poll --dry-run        # safe, no posts
+python -m qreviews poll                  # live, posts advisory comments
 
 # 7. View the dashboard
 python -m qreviews dashboard
@@ -252,7 +252,7 @@ reviewer_groups:
   - slug: ip-protection-reviewers
     enabled: true
     skill_path: skills/ip-protection-review/SKILL.md
-    # risk_threshold / complexity_threshold are optional — fall back to defaults
+    # risk_threshold / complexity_threshold are optional; fall back to defaults
     # restrict_to_member_authors defaults to true
 
   - slug: home-newtab-reviewers
@@ -295,7 +295,7 @@ single-page app (deep navy + Mozilla flame orange, IBM Plex typography)
 with:
 
 - **KPI row**: revisions seen, auto-reviewed, % coverage, median scores,
-  cumulative Claude cost — rendered as oversized tabular-figure numerals.
+  cumulative Claude cost, rendered as oversized tabular-figure numerals.
 - **Throughput chart**: daily seen vs. auto-reviewed (`@mantine/charts`
   `LineChart`).
 - **Score histograms**: risk and complexity distributions (`BarChart`),
@@ -305,8 +305,8 @@ with:
   to Phabricator.
 
 The dashboard reads the same SQLite file the poller writes to (WAL mode),
-so you can run both side-by-side. Auto-refreshes every 30 seconds via
-TanStack Query.
+so you can run both side-by-side. New activity surfaces once the hourly
+poller cycle picks it up.
 
 ### Stack
 
@@ -330,7 +330,7 @@ npm --prefix qreviews/dashboard/web run build
 ```
 
 For iterative frontend development, run the Vite dev server (port 5173)
-against a live FastAPI on 8765 — the dev server proxies `/api` and
+against a live FastAPI on 8765. The dev server proxies `/api` and
 `/phabricator` automatically:
 
 ```bash
@@ -355,7 +355,7 @@ ruff format qreviews tests        # format
 ### Testing against a real revision (recommended before going live)
 
 ```bash
-# Dry-run — fetches, scores, generates the review, prints, does NOT post:
+# Dry-run: fetches, scores, generates the review, prints, does NOT post:
 python -m qreviews review D123456
 
 # Once you're satisfied, post for real:
@@ -390,7 +390,7 @@ python -m qreviews review D123456 --post
 ## Running autonomously on macOS (launchd)
 
 ```bash
-./deploy/install-launchd.sh     # one-time install — keeps `poll` running
+./deploy/install-launchd.sh     # one-time install, keeps `poll` running
 ./deploy/uninstall-launchd.sh   # remove
 ```
 
@@ -410,17 +410,17 @@ autodeploys on push to `main`. One-time setup:
 2. **Set environment variables** in the Railway dashboard:
    - `ANTHROPIC_API_KEY` and `PHABRICATOR_API_TOKEN` (required secrets).
    - `QREVIEWS_DB_PATH=/data/qreviews.db` (points SQLite at the volume).
-   - `QREVIEWS_POLL_INTERVAL_SECONDS=3600` is now optional — it matches
+   - `QREVIEWS_POLL_INTERVAL_SECONDS=3600` is now optional. It matches
      the repo default. Set it only if you want to deviate from hourly
      polling.
    - `QREVIEWS_DASHBOARD_URL=https://qreviews-production.up.railway.app`
-     (optional — when set, advisory comments posted to Phabricator link
+     (optional; when set, advisory comments posted to Phabricator link
      back to this URL so reviewers can see live metrics).
 3. **Generate a public domain** under Settings → Networking. The dashboard
    contents are not sensitive; only the API keys above are.
 
 The webhook endpoint (`POST /phabricator/herald`) is included but
-unconfigured — without `PHABRICATOR_WEBHOOK_SECRET` set, signed POSTs are
+unconfigured. Without `PHABRICATOR_WEBHOOK_SECRET` set, signed POSTs are
 the only thing accepted, so leaving it exposed is harmless.
 
 ---
