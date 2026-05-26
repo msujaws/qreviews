@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 
 from qreviews import searchfox
@@ -101,5 +102,35 @@ def test_execute_tool_bad_args(mocker):
 
 def test_unavailable_searchfox(mocker):
     mocker.patch("shutil.which", return_value=None)
+    mocker.patch("qreviews.searchfox._FALLBACK_BIN_DIRS", ())
     out = searchfox.execute_tool("read_file", {"path": "a/b.cpp"})
     assert out.startswith("ERROR:") and "searchfox-cli not found" in out
+
+
+def test_resolver_falls_back_to_cargo_bin(mocker):
+    """When PATH is bare (e.g. launchd), resolver checks ~/.cargo/bin etc."""
+    mocker.patch("shutil.which", return_value=None)
+    mocker.patch(
+        "qreviews.searchfox._FALLBACK_BIN_DIRS",
+        ("~/.cargo/bin",),
+    )
+    expected = os.path.expanduser("~/.cargo/bin/searchfox-cli")
+    mocker.patch(
+        "os.access",
+        side_effect=lambda p, mode: p == expected,
+    )
+    run = mocker.patch("subprocess.run", return_value=_completed("ok\n"))
+    searchfox.find_definition("Foo::Bar")
+    args = run.call_args[0][0]
+    assert args[0] == expected
+
+
+def test_has_searchfox_true_when_resolvable(mocker):
+    mocker.patch("shutil.which", return_value="/somewhere/searchfox-cli")
+    assert searchfox.has_searchfox() is True
+
+
+def test_has_searchfox_false_when_unresolvable(mocker):
+    mocker.patch("shutil.which", return_value=None)
+    mocker.patch("qreviews.searchfox._FALLBACK_BIN_DIRS", ())
+    assert searchfox.has_searchfox() is False

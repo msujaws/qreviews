@@ -18,6 +18,7 @@ Design notes:
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 
@@ -27,6 +28,16 @@ log = logging.getLogger(__name__)
 SEARCHFOX_CMD = "searchfox-cli"
 DEFAULT_TIMEOUT_SECONDS = 30.0
 MAX_OUTPUT_BYTES = 16_000  # ~4-5k tokens
+
+# Common locations where `cargo install` / `cargo binstall` / package managers
+# drop binaries. Checked in order when `shutil.which` comes up empty — typically
+# because PATH is minimal (launchd agents, system services).
+_FALLBACK_BIN_DIRS = (
+    "~/.cargo/bin",
+    "~/.local/bin",
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+)
 
 # Languages exposed via the --cpp/--js/-c/--webidl/--java/--kt flags.
 _LANG_FLAG = {
@@ -43,11 +54,30 @@ class SearchfoxUnavailable(RuntimeError):
     pass
 
 
-def _ensure_available() -> None:
-    if shutil.which(SEARCHFOX_CMD) is None:
+def _resolve_searchfox() -> str | None:
+    """Return an absolute path to searchfox-cli, or None if not found."""
+    found = shutil.which(SEARCHFOX_CMD)
+    if found:
+        return found
+    for d in _FALLBACK_BIN_DIRS:
+        candidate = os.path.expanduser(os.path.join(d, SEARCHFOX_CMD))
+        if os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
+def has_searchfox() -> bool:
+    """Cheap, non-raising probe for tool availability."""
+    return _resolve_searchfox() is not None
+
+
+def _ensure_available() -> str:
+    path = _resolve_searchfox()
+    if path is None:
         raise SearchfoxUnavailable(
-            "searchfox-cli not found on PATH; install with `cargo install searchfox-cli`"
+            "searchfox-cli not found; install with `cargo install searchfox-cli`"
         )
+    return path
 
 
 def _run(args: list[str], *, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> str:
@@ -56,10 +86,10 @@ def _run(args: list[str], *, timeout: float = DEFAULT_TIMEOUT_SECONDS) -> str:
     On failure (non-zero exit), returns a string starting with "ERROR: " so the
     model can read it and adjust without us raising.
     """
-    _ensure_available()
+    cmd_path = _ensure_available()
     try:
         proc = subprocess.run(
-            [SEARCHFOX_CMD, *args],
+            [cmd_path, *args],
             capture_output=True,
             text=True,
             timeout=timeout,
