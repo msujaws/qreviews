@@ -9,12 +9,13 @@ import { Eyebrow } from "./components/Eyebrow";
 import { HowItWorks } from "./components/HowItWorks";
 import { Premise } from "./components/Premise";
 import { useDashboardData } from "./hooks/useDashboardData";
+import { useGroupParam } from "./hooks/useGroupParam";
 
 const DEFAULT_RISK = 3;
 const DEFAULT_COMPLEXITY = 3;
 
 export function App() {
-  const [group, setGroup] = useState<string | null>(null);
+  const [group, setGroup] = useGroupParam();
   const [openRevision, setOpenRevision] = useState<number | null>(null);
 
   const { groups, summary, histograms, timeseries, revisions } = useDashboardData(group);
