@@ -281,6 +281,22 @@ class ConduitClient:
                 by_slug[slug] = phid
         return by_slug
 
+    def project_members(self, project_phid: str) -> set[str]:
+        """Return PHIDs of users who are members of the given Phabricator project."""
+        result = self.call(
+            "project.search",
+            {
+                "constraints": {"phids": [project_phid]},
+                "attachments": {"members": True},
+                "limit": 1,
+            },
+        )
+        items = result.get("data") or []
+        if not items:
+            return set()
+        members_block = (items[0].get("attachments") or {}).get("members") or {}
+        return {m["phid"] for m in (members_block.get("members") or []) if m.get("phid")}
+
     # ------------------------------------------------------------ revisions
 
     def search_revisions(

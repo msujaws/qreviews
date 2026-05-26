@@ -151,6 +151,45 @@ def test_resolve_project_phids_empty():
     assert c.resolve_project_phids([]) == {}
 
 
+def test_project_members_returns_phids(fake_session):
+    fake_session.post.return_value = _ok_response(
+        {
+            "data": [
+                {
+                    "phid": "PHID-PROJ-abc",
+                    "attachments": {
+                        "members": {
+                            "members": [
+                                {"phid": "PHID-USER-1"},
+                                {"phid": "PHID-USER-2"},
+                            ]
+                        }
+                    },
+                }
+            ]
+        }
+    )
+    c = _make_client(fake_session)
+    assert c.project_members("PHID-PROJ-abc") == {"PHID-USER-1", "PHID-USER-2"}
+    data = fake_session.post.call_args[1]["data"]
+    assert ("constraints[phids][0]", "PHID-PROJ-abc") in data
+    assert ("attachments[members]", "true") in data
+
+
+def test_project_members_empty_when_project_not_found(fake_session):
+    fake_session.post.return_value = _ok_response({"data": []})
+    c = _make_client(fake_session)
+    assert c.project_members("PHID-PROJ-missing") == set()
+
+
+def test_project_members_empty_when_no_members_attachment(fake_session):
+    fake_session.post.return_value = _ok_response(
+        {"data": [{"phid": "PHID-PROJ-abc", "attachments": {}}]}
+    )
+    c = _make_client(fake_session)
+    assert c.project_members("PHID-PROJ-abc") == set()
+
+
 def test_search_revisions_parses_response(fake_session):
     fake_session.post.return_value = _ok_response(
         {
