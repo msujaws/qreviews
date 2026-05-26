@@ -217,3 +217,77 @@ def test_poll_group_advances_watermark(mocked_poller):
     group = poller.config.enabled_groups()[0]
     poller.poll_group(group, dry_run=True)
     assert poller.store.get_watermark(group.slug) == 1716000100
+
+
+def test_additional_skill_paths_for_excludes_primary(mocked_poller, tmp_path):
+    poller, conduit, _ = mocked_poller
+
+    # Stand up a fake skills/ tree and point the poller at it.
+    skills_root = tmp_path / "skills"
+    (skills_root / "desktop-theme-review").mkdir(parents=True)
+    (skills_root / "desktop-theme-review" / "SKILL.md").write_text("DT body")
+    (skills_root / "ip-protection-review").mkdir()
+    (skills_root / "ip-protection-review" / "SKILL.md").write_text("IP body")
+    poller._skills_root = lambda: skills_root  # type: ignore[method-assign]
+
+    conduit.resolve_project_phids.return_value = {
+        "desktop-theme-reviewers": "PHID-PROJ-dt",
+        "ip-protection-reviewers": "PHID-PROJ-ip",
+    }
+
+    rev = Revision(
+        phid="PHID-DREV-200",
+        id=200,
+        title="x",
+        summary="",
+        status="needs-review",
+        author_phid="PHID-USER-1",
+        repository_phid=None,
+        bug_id=None,
+        date_created=0,
+        date_modified=0,
+        # Both groups tagged on this revision.
+        reviewer_phids=["PHID-PROJ-ip", "PHID-PROJ-dt", "PHID-USER-bob"],
+    )
+
+    paths = poller.additional_skill_paths_for(rev, primary_phid="PHID-PROJ-ip")
+    # Primary (ip) excluded; supplemental (dt) included; user PHID ignored.
+    assert paths == [str(skills_root / "desktop-theme-review" / "SKILL.md")]
+
+
+def test_process_revision_threads_supplemental_skills_into_review(
+    mocked_poller, tmp_path
+):
+    poller, conduit, anthropic = mocked_poller
+
+    skills_root = tmp_path / "skills"
+    (skills_root / "desktop-theme-review").mkdir(parents=True)
+    (skills_root / "desktop-theme-review" / "SKILL.md").write_text(
+        "---\ndescription: x\n---\nDESKTOP THEME RULES"
+    )
+    poller._skills_root = lambda: skills_root  # type: ignore[method-assign]
+    conduit.resolve_project_phids.return_value = {
+        "desktop-theme-reviewers": "PHID-PROJ-dt",
+    }
+
+    rev = _rev()
+    # Add the desktop-theme group as an additional reviewer.
+    rev = Revision(**{**rev.__dict__, "reviewer_phids": [*rev.reviewer_phids, "PHID-PROJ-dt"]})
+
+    anthropic.messages.create.side_effect = [
+        _claude_text(json.dumps({
+            "risk": 1, "complexity": 1,
+            "risk_factors": [], "complexity_factors": [],
+        })),
+        _claude_text("### ok\nlooks fine"),
+    ]
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(rev, group, dry_run=True)
+    assert result.posted is False  # dry_run, but review still generated
+
+    # The review-generation call (second messages.create) must have the
+    # desktop-theme skill body in the system prompt.
+    review_call = anthropic.messages.create.call_args_list[1]
+    system_text = review_call.kwargs["system"][0]["text"]
+    assert "DESKTOP THEME RULES" in system_text
+    assert "Additional reviewer-group context" in system_text

@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 from anthropic import Anthropic
 
@@ -16,6 +17,7 @@ from qreviews.config import Config, ReviewerGroup, Secrets
 from qreviews.poster import post_comment, render_comment
 from qreviews.review import generate_review
 from qreviews.scoring import score_revision
+from qreviews.skills import discover_skill_dirs
 from qreviews.state import Store
 
 log = logging.getLogger(__name__)
@@ -49,6 +51,8 @@ class Poller:
         )
         self.anthropic = anthropic_client or Anthropic(api_key=secrets.anthropic_api_key)
         self._group_phids: dict[str, str] = {}
+        self._supplemental_skills: dict[str, Path] = {}
+        self._supplemental_ready = False
 
     # ------------------------------------------------------------ phid resolve
 
@@ -66,6 +70,78 @@ class Poller:
         self._group_phids[slug] = phid
         log.info("resolved %s → %s", slug, phid)
         return phid
+
+    # ------------------------------------------------------------ supplemental skills
+
+    def _skills_root(self) -> Path:
+        """`skills/` directory at the repo root, located relative to this file."""
+        return Path(__file__).resolve().parent.parent / "skills"
+
+    def _ensure_supplemental_skills(self) -> dict[str, Path]:
+        """Lazily discover supplemental skills and resolve them to PHIDs.
+
+        Builds (and caches) `self._supplemental_skills`, a `phid → SKILL.md
+        path` map. Slugs that fail to resolve in Phabricator are dropped
+        silently. Called on first use so test setups that never poll don't
+        pay the network cost.
+        """
+        if self._supplemental_ready:
+            return self._supplemental_skills
+        self._supplemental_ready = True
+        discovered = discover_skill_dirs(self._skills_root())
+        if not discovered:
+            return self._supplemental_skills
+        # Use cached PHIDs where possible to avoid a Conduit call per process.
+        unresolved: list[str] = []
+        slug_to_phid: dict[str, str] = {}
+        for slug in discovered:
+            phid = self._group_phids.get(slug) or self.store.get_cached_phid(slug)
+            if phid:
+                slug_to_phid[slug] = phid
+            else:
+                unresolved.append(slug)
+        if unresolved:
+            try:
+                resolved = self.conduit.resolve_project_phids(unresolved)
+            except Exception:
+                log.exception("supplemental skill PHID resolution failed")
+                resolved = {}
+            for slug, phid in resolved.items():
+                self.store.cache_phid(slug, phid)
+                slug_to_phid[slug] = phid
+            for slug in unresolved:
+                if slug not in resolved:
+                    log.debug("supplemental skill slug not resolved in Phabricator: %s", slug)
+        for slug, phid in slug_to_phid.items():
+            self._group_phids.setdefault(slug, phid)
+            self._supplemental_skills[phid] = discovered[slug]
+        log.info(
+            "supplemental skills ready: %d resolved out of %d discovered",
+            len(self._supplemental_skills),
+            len(discovered),
+        )
+        return self._supplemental_skills
+
+    def additional_skill_paths_for(
+        self, revision: Revision, *, primary_phid: str
+    ) -> list[str]:
+        """Skill paths to attach as supplemental context for this revision.
+
+        Excludes the primary group's own PHID so its skill isn't loaded
+        twice. Result is sorted by path for deterministic prompt ordering.
+        """
+        skills = self._ensure_supplemental_skills()
+        if not skills:
+            return []
+        paths: list[str] = []
+        for phid in revision.reviewer_phids:
+            if phid == primary_phid:
+                continue
+            path = skills.get(phid)
+            if path is not None:
+                paths.append(str(path))
+        paths.sort()
+        return paths
 
     # ------------------------------------------------------------ per-revision
 
@@ -236,6 +312,23 @@ class Poller:
                 complexity=scoring.scores.complexity,
             )
 
+        # Pull in extra reviewer-group skills if the revision is tagged
+        # with groups beyond the one we matched on.
+        try:
+            primary_phid = self.resolve_group_phid(group.slug)
+        except Exception:
+            primary_phid = ""
+        additional_skill_paths = self.additional_skill_paths_for(
+            revision, primary_phid=primary_phid
+        )
+        if additional_skill_paths:
+            log.info(
+                "%s: attaching %d supplemental skill(s): %s",
+                revision.display_id,
+                len(additional_skill_paths),
+                ", ".join(Path(p).parent.name for p in additional_skill_paths),
+            )
+
         # Generate review
         try:
             review = generate_review(
@@ -249,6 +342,7 @@ class Poller:
                 author_phid=revision.author_phid,
                 bug_id=revision.bug_id,
                 raw_diff=raw_diff,
+                additional_skill_paths=additional_skill_paths,
             )
         except Exception as e:
             log.exception("review generation failed for %s: %s", revision.display_id, e)

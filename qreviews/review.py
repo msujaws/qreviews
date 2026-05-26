@@ -17,6 +17,7 @@ the true cost.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -120,6 +121,16 @@ def _final_text(content_blocks: list[Any]) -> str:
     return "".join(parts).strip()
 
 
+SUPPLEMENTAL_SKILLS_HEADER = (
+    "\n\n---\n\n"
+    "## Additional reviewer-group context\n\n"
+    "This revision is also tagged with other reviewer groups whose "
+    "rubrics are included below. Treat them as supplementary guidance "
+    "alongside the primary area review guidance above; surface findings "
+    "that any of them would care about.\n\n"
+)
+
+
 def generate_review(
     client: Anthropic,
     *,
@@ -132,11 +143,15 @@ def generate_review(
     author_phid: str,
     bug_id: str | None,
     raw_diff: str,
+    additional_skill_paths: Sequence[str] = (),
     max_iterations: int = MAX_TOOL_ITERATIONS,
     enable_tools: bool = True,
 ) -> ReviewResult:
     skill_body = load_skill(skill_path)
     system_text = REVIEW_WRAPPER + skill_body
+    if additional_skill_paths:
+        supplemental_bodies = [load_skill(p) for p in additional_skill_paths]
+        system_text += SUPPLEMENTAL_SKILLS_HEADER + "\n\n---\n\n".join(supplemental_bodies)
 
     user_msg = _build_user_message(
         title=title,

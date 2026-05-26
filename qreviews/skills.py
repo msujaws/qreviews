@@ -36,3 +36,26 @@ def load_skill(skill_path: str) -> str:
     body = _strip_frontmatter(raw)
     log.info("loaded skill %s (%d chars)", skill_path, len(body))
     return body
+
+
+def discover_skill_dirs(skills_root: Path) -> dict[str, Path]:
+    """Scan a `skills/` root and return `{derived_slug: skill_md_path}`.
+
+    A subdirectory `<name>/` with a `SKILL.md` inside maps to the
+    Phabricator project slug `<name>.removesuffix("-review") + "-reviewers"`.
+    This matches the directory-naming convention used by both
+    qreviews/skills/ and the imported custom-module-reviewer outputs.
+    Returns an empty dict if the root doesn't exist.
+    """
+    if not skills_root.exists() or not skills_root.is_dir():
+        return {}
+    out: dict[str, Path] = {}
+    for child in sorted(skills_root.iterdir()):
+        if not child.is_dir():
+            continue
+        skill_file = child / "SKILL.md"
+        if not skill_file.is_file():
+            continue
+        slug = child.name.removesuffix("-review") + "-reviewers"
+        out[slug] = skill_file
+    return out
