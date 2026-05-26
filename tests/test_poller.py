@@ -12,13 +12,17 @@ from qreviews.conduit import Diff, Revision
 from qreviews.poller import Poller
 
 
-def _rev(revision_id: int = 100, project_phids: list[str] | None = None) -> Revision:
+def _rev(
+    revision_id: int = 100,
+    project_phids: list[str] | None = None,
+    status: str = "needs-review",
+) -> Revision:
     return Revision(
         phid=f"PHID-DREV-{revision_id}",
         id=revision_id,
         title="Fix the thing",
         summary="It was broken.",
-        status="needs-review",
+        status=status,
         author_phid="PHID-USER-1",
         repository_phid="PHID-REPO-1",
         bug_id="9999",
@@ -291,6 +295,40 @@ def test_member_restriction_can_be_disabled(mocked_poller):
     assert result.skipped_reason != "author_not_in_group"
     # Membership lookup should be skipped entirely when the flag is off.
     conduit.project_members.assert_not_called()
+
+
+def test_draft_revision_is_skipped(mocked_poller):
+    poller, conduit, anthropic = mocked_poller
+
+    draft = _rev(status="draft")
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(draft, group, dry_run=True)
+
+    assert result.posted is False
+    assert result.skipped_reason == "status_draft"
+    # Author hasn't requested review — don't fetch the diff, score, or post.
+    conduit.latest_diff.assert_not_called()
+    conduit.get_raw_diff.assert_not_called()
+    conduit.human_commenter_phids.assert_not_called()
+    anthropic.messages.create.assert_not_called()
+    conduit.post_comment.assert_not_called()
+
+
+def test_changes_planned_revision_is_skipped(mocked_poller):
+    poller, conduit, anthropic = mocked_poller
+
+    wip = _rev(status="changes-planned")
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(wip, group, dry_run=True)
+
+    assert result.posted is False
+    assert result.skipped_reason == "status_changes_planned"
+    # "Plan Changes" means the author took it back to WIP — stay out.
+    conduit.latest_diff.assert_not_called()
+    conduit.get_raw_diff.assert_not_called()
+    conduit.human_commenter_phids.assert_not_called()
+    anthropic.messages.create.assert_not_called()
+    conduit.post_comment.assert_not_called()
 
 
 def test_secure_revision_phid_is_cached_across_calls(mocked_poller):

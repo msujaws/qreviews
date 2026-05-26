@@ -23,6 +23,15 @@ from qreviews.state import Store
 log = logging.getLogger(__name__)
 
 
+# Phabricator status values that mean "author isn't asking for a review
+# right now." `draft` is the pre-request state; `changes-planned` is what
+# Phabricator's "Plan Changes" button sets when the author wants to take
+# the revision back to WIP. Polling filters to `needs-review` already, so
+# these only reach us via the Herald webhook, but `process_revision()` is
+# the chokepoint for both paths.
+NOT_READY_FOR_REVIEW_STATUSES = frozenset({"draft", "changes-planned"})
+
+
 @dataclass
 class ProcessResult:
     revision_id: int
@@ -214,6 +223,18 @@ class Poller:
                 revision_id=revision.id,
                 posted=False,
                 skipped_reason="already_accepted",
+            )
+
+        if revision.status in NOT_READY_FOR_REVIEW_STATUSES:
+            log.info(
+                "skipping %s: status=%s (author has not requested review)",
+                revision.display_id,
+                revision.status,
+            )
+            return ProcessResult(
+                revision_id=revision.id,
+                posted=False,
+                skipped_reason=f"status_{revision.status.replace('-', '_')}",
             )
 
         # Security-sensitive revisions (Mozilla's `secure-revision` project
