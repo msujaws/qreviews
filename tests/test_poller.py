@@ -57,6 +57,9 @@ def mocked_poller(config, store, tmp_path):
     # Default: no human commenters — set explicitly so MagicMock's truthy
     # default doesn't accidentally trip the "already_commented" skip.
     conduit.human_commenter_phids.return_value = set()
+    # Default: the test author is a member of the group, so the
+    # restrict_to_member_authors gate lets revisions through.
+    conduit.project_members.return_value = {"PHID-USER-1"}
 
     anthropic = MagicMock()
 
@@ -207,6 +210,54 @@ def test_revision_already_reviewed_by_qreviews_is_skipped(mocked_poller):
     conduit.get_raw_diff.assert_not_called()
     anthropic.messages.create.assert_not_called()
     conduit.post_comment.assert_not_called()
+
+
+def test_revision_authored_by_non_member_is_skipped(mocked_poller):
+    poller, conduit, anthropic = mocked_poller
+    conduit.project_members.return_value = {"PHID-USER-other"}
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(_rev(), group, dry_run=True)
+    assert result.posted is False
+    assert result.skipped_reason == "author_not_in_group"
+    # The membership gate runs before any per-revision Conduit calls.
+    conduit.latest_diff.assert_not_called()
+    conduit.human_commenter_phids.assert_not_called()
+    conduit.get_raw_diff.assert_not_called()
+    anthropic.messages.create.assert_not_called()
+    conduit.post_comment.assert_not_called()
+
+
+def test_empty_members_lookup_does_not_skip(mocked_poller):
+    """A transient empty members result should not silently drop every revision."""
+    poller, conduit, anthropic = mocked_poller
+    conduit.project_members.return_value = set()
+    anthropic.messages.create.side_effect = [
+        _claude_text(json.dumps({
+            "risk": 0, "complexity": 0, "risk_factors": [], "complexity_factors": [],
+        })),
+        _claude_text("### Looks good\n"),
+    ]
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(_rev(), group, dry_run=True)
+    assert result.skipped_reason != "author_not_in_group"
+
+
+def test_member_restriction_can_be_disabled(mocked_poller):
+    poller, conduit, anthropic = mocked_poller
+    group = poller.config.enabled_groups()[0]
+    group.restrict_to_member_authors = False
+    # Author is not in the (mocked) member set, but the gate is off.
+    conduit.project_members.return_value = {"PHID-USER-other"}
+    anthropic.messages.create.side_effect = [
+        _claude_text(json.dumps({
+            "risk": 0, "complexity": 0, "risk_factors": [], "complexity_factors": [],
+        })),
+        _claude_text("### Looks good\n"),
+    ]
+    result = poller.process_revision(_rev(), group, dry_run=True)
+    assert result.skipped_reason != "author_not_in_group"
+    # Membership lookup should be skipped entirely when the flag is off.
+    conduit.project_members.assert_not_called()
 
 
 def test_poll_group_advances_watermark(mocked_poller):

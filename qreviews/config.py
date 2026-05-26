@@ -58,6 +58,10 @@ class ReviewerGroup(BaseModel):
     skill_path: str | None = None
     risk_threshold: int | None = None
     complexity_threshold: int | None = None
+    # When true (default), only review revisions whose author is a member of
+    # the Phabricator project corresponding to this group. Set to false to
+    # open the group up to external authors.
+    restrict_to_member_authors: bool = True
 
     def effective_risk_threshold(self, defaults: Defaults) -> int:
         return self.risk_threshold if self.risk_threshold is not None else defaults.risk_threshold

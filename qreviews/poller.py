@@ -53,6 +53,7 @@ class Poller:
         self._group_phids: dict[str, str] = {}
         self._supplemental_skills: dict[str, Path] = {}
         self._supplemental_ready = False
+        self._group_member_phids: dict[str, set[str]] = {}
 
     # ------------------------------------------------------------ phid resolve
 
@@ -70,6 +71,19 @@ class Poller:
         self._group_phids[slug] = phid
         log.info("resolved %s → %s", slug, phid)
         return phid
+
+    def resolve_group_members(self, slug: str, group_phid: str) -> set[str]:
+        """Return the set of user PHIDs that are members of the group's project.
+
+        Cached in memory for the lifetime of the Poller; a process restart
+        re-fetches and picks up membership changes.
+        """
+        if slug in self._group_member_phids:
+            return self._group_member_phids[slug]
+        members = self.conduit.project_members(group_phid)
+        self._group_member_phids[slug] = members
+        log.info("resolved %d member(s) for group %s", len(members), slug)
+        return members
 
     # ------------------------------------------------------------ supplemental skills
 
@@ -159,6 +173,26 @@ class Poller:
                 posted=False,
                 skipped_reason="already_accepted",
             )
+
+        # Author-membership gate: while qreviews is being validated, only
+        # review revisions whose author is in the group's Phabricator project.
+        # If the members lookup returns empty (transient failure, etc.) we
+        # don't skip — we'd rather over-include than silently drop everything.
+        if group.restrict_to_member_authors:
+            group_phid = self.resolve_group_phid(group.slug)
+            members = self.resolve_group_members(group.slug, group_phid)
+            if members and revision.author_phid not in members:
+                log.info(
+                    "skipping %s: author %s is not a member of %s",
+                    revision.display_id,
+                    revision.author_phid,
+                    group.slug,
+                )
+                return ProcessResult(
+                    revision_id=revision.id,
+                    posted=False,
+                    skipped_reason="author_not_in_group",
+                )
 
         diff = self.conduit.latest_diff(revision.phid)
         if not diff:
