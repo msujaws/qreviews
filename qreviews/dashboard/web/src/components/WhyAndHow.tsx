@@ -4,46 +4,46 @@ import { PipelineDiagram } from "./PipelineDiagram";
 
 const PROBLEMS: Array<{ label: string; body: string }> = [
   {
-    label: "slow queue",
+    label: "Slow queue",
     body: "Patches sit unreviewed for days, even the routine ones.",
   },
   {
-    label: "lost attention",
-    body: "When reviewers spend their time on a steady stream of small, low-risk changes, the patches that need careful eyes get less of it.",
+    label: "Lost attention",
+    body: "Reviewers spend their attention on a steady stream of small, low-risk changes. The patches that need careful eyes get less of it.",
   },
   {
-    label: "routine load",
-    body: "Most revisions in these queues are small and repetitive. They consume reviewer time before the harder patches get looked at.",
+    label: "Routine load",
+    body: "Most revisions in these queues are small and repetitive. They consume reviewer time before the harder patches get attention.",
   },
   {
-    label: "fresh-eyes gap",
-    body: "Routine patches rarely get a careful second pass, because reviewers are saving their focus for the harder ones.",
+    label: "Fresh-eyes gap",
+    body: "Routine patches rarely get a careful second pass. Reviewers save their focus for the harder ones.",
   },
 ];
 
 const STEPS: Array<{ label: string; body: string }> = [
   {
-    label: "discover",
-    body: "Poll Phabricator for revisions tagged with the configured reviewer groups.",
+    label: "Discover",
+    body: "Poll Phabricator for revisions tagged with configured reviewer groups.",
   },
   {
-    label: "score",
-    body: "Ask Claude (Haiku) to rate risk and complexity on a 0 to 10 scale, with factors cited.",
+    label: "Score",
+    body: "Ask Claude (Haiku) to rate risk and complexity on a 0–10 scale, with factors cited.",
   },
   {
-    label: "gate",
+    label: "Gate",
     body: "Proceed only when both scores fall below the group's threshold. Otherwise, skip.",
   },
   {
-    label: "review",
+    label: "Review",
     body: "Run a multi-turn Claude review using the group's SKILL.md, with searchfox tools for cross-references.",
   },
   {
-    label: "post",
+    label: "Post",
     body: "Render a single advisory comment via Conduit. Never accept, reject, or request changes.",
   },
   {
-    label: "track",
+    label: "Track",
     body: "Persist every step to SQLite so this dashboard can show throughput, distributions, and per-revision detail.",
   },
 ];
@@ -68,7 +68,7 @@ export function WhyAndHow() {
         <span aria-hidden="true" className="inline-block w-3 text-[var(--pt-muted)]">
           {opened ? "▾" : "▸"}
         </span>
-        <span>why &amp; how</span>
+        <span>Why and how</span>
       </button>
 
       <Collapse in={opened}>
@@ -77,8 +77,7 @@ export function WhyAndHow() {
           className="flex flex-col gap-8 pt-surface px-8 py-8"
         >
           <p className="text-[15px] leading-[1.7] text-[var(--pt-ink)]">
-            Review queues for Firefox engineering teams keep hitting the
-            same four patterns.
+            Firefox review queues keep hitting four patterns.
           </p>
 
           <ul className="grid grid-cols-1 md:grid-cols-2 gap-px bg-[var(--pt-hairline)] border border-[var(--pt-hairline)]">
@@ -123,7 +122,7 @@ export function WhyAndHow() {
           </p>
 
           <div className="flex flex-col gap-3">
-            <div className="pt-eyebrow">pipeline</div>
+            <div className="pt-eyebrow">Pipeline</div>
             <div className="border border-[var(--pt-hairline)] bg-[var(--pt-bg)] px-4 py-5">
               <PipelineDiagram />
             </div>
@@ -149,10 +148,10 @@ export function WhyAndHow() {
           </ol>
 
           <div className="pt-mono text-[12px] text-[var(--pt-muted)] leading-[1.7]">
-            Below: throughput and score histograms across all observed
-            revisions, followed by the recent-activity ledger. Click any
-            row to see the full posted comment, factors, token usage, and
-            a link to Phabricator.
+            Throughput and score histograms across all observed revisions
+            follow below, then the recent-activity ledger. Click any row
+            for the full posted comment, factors, token usage, and a link
+            to Phabricator.
             <span className="mx-2 text-[var(--pt-hairline)]">·</span>
             <a
               href={ROADMAP_URL}
@@ -160,7 +159,7 @@ export function WhyAndHow() {
               rel="noreferrer"
               className={linkCls}
             >
-              roadmap ↗
+              Roadmap
             </a>
             <span className="mx-2 text-[var(--pt-hairline)]">·</span>
             <a
@@ -169,7 +168,7 @@ export function WhyAndHow() {
               rel="noreferrer"
               className={linkCls}
             >
-              next steps ↗
+              Next steps
             </a>
             <span className="mx-2 text-[var(--pt-hairline)]">·</span>
             <a
@@ -178,7 +177,7 @@ export function WhyAndHow() {
               rel="noreferrer"
               className={linkCls}
             >
-              source on github ↗
+              Source on GitHub
             </a>
           </div>
         </div>

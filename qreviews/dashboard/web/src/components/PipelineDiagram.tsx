@@ -144,23 +144,23 @@ export function PipelineDiagram() {
         </defs>
 
         {/* Phabricator (tall, left) */}
-        <Box x={20} y={30} w={110} h={240} label="Phabricator" sub="conduit api" />
+        <Box x={20} y={30} w={110} h={240} label="Phabricator" sub="Conduit API" />
 
         {/* Row 1: Poller, Score, Skip */}
-        <Box x={170} y={40} w={120} h={44} label="Poller" sub="hourly" />
-        <Box x={330} y={40} w={150} h={44} label="Score" sub="claude haiku" />
-        <Box x={520} y={40} w={120} h={44} label="Skip" sub="log only" faded />
+        <Box x={170} y={40} w={120} h={44} label="Poller" sub="Hourly" />
+        <Box x={330} y={40} w={150} h={44} label="Score" sub="Claude Haiku" />
+        <Box x={520} y={40} w={120} h={44} label="Skip" sub="Log only" faded />
 
         {/* Row 2: Review, Searchfox */}
-        <Box x={330} y={140} w={150} h={44} label="Review" sub="claude sonnet" />
+        <Box x={330} y={140} w={150} h={44} label="Review" sub="Claude Sonnet" />
         <Box x={520} y={140} w={150} h={44} label="Searchfox" sub="mozilla-central" />
 
         {/* Row 3: Post */}
-        <Box x={330} y={240} w={150} h={44} label="Post" sub="comment txn" />
+        <Box x={330} y={240} w={150} h={44} label="Post" sub="Comment transaction" />
 
         {/* Row 4: SQLite, Dashboard */}
-        <Box x={330} y={330} w={150} h={44} label="SQLite" sub="state + metrics" />
-        <Box x={520} y={330} w={150} h={44} label="Dashboard" sub="fastapi + react" />
+        <Box x={330} y={330} w={150} h={44} label="SQLite" sub="State + metrics" />
+        <Box x={520} y={330} w={150} h={44} label="Dashboard" sub="FastAPI + React" />
 
         {/* Phab → Poller */}
         <Edge
@@ -168,7 +168,7 @@ export function PipelineDiagram() {
             [130, 62],
             [170, 62],
           ]}
-          label="search"
+          label="Search"
           labelPos={[150, 54]}
         />
 
@@ -186,7 +186,7 @@ export function PipelineDiagram() {
             [480, 62],
             [520, 62],
           ]}
-          label="otherwise"
+          label="Otherwise"
           labelPos={[500, 54]}
         />
 
@@ -196,7 +196,7 @@ export function PipelineDiagram() {
             [405, 84],
             [405, 140],
           ]}
-          label="both < threshold"
+          label="Both < threshold"
           labelPos={[460, 112]}
           flame
         />
@@ -207,7 +207,7 @@ export function PipelineDiagram() {
             [480, 158],
             [520, 158],
           ]}
-          label="tools"
+          label="Tools"
           labelPos={[500, 134]}
         />
         <Edge
@@ -249,7 +249,7 @@ export function PipelineDiagram() {
             [150, 230],
             [130, 230],
           ]}
-          label="comment"
+          label="Comment"
           labelPos={[200, 254]}
         />
       </svg>
