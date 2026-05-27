@@ -108,8 +108,44 @@ export function RevisionDrawer({
               />
             </div>
 
+            <TestSignalCard
+              inDiffSignal={data.in_diff_test_signal}
+              coverageSignal={data.coverage_signal}
+              testFiles={data.test_files_changed}
+              nonTestFiles={data.non_test_files_changed}
+            />
+
+            {data.findings && data.findings.length > 0 && (
+              <div className="pt-surface px-5 py-5">
+                <Eyebrow rule>inline findings ({data.findings.length})</Eyebrow>
+                <ul className="mt-4 space-y-3">
+                  {data.findings.map((f, i) => (
+                    <li key={i} className="border-l-2 border-[var(--pt-flame)]/60 pl-3">
+                      <div className="pt-mono text-[11px] text-[var(--pt-muted)]">
+                        <a
+                          href={`https://phabricator.services.mozilla.com/D${data.revision_id}#inline-${f.line}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[var(--pt-flame)] border-b border-dotted border-[var(--pt-flame)]/60 hover:border-[var(--pt-flame)]"
+                        >
+                          {f.file_path}:{f.line}
+                          {f.is_new_file ? "" : " (old)"}
+                        </a>
+                        <span className="ml-2 text-[var(--pt-muted)]">
+                          confidence {Math.round((f.confidence || 0) * 100)}%
+                        </span>
+                      </div>
+                      <div className="mt-1 text-[13px] leading-[1.5] text-[var(--pt-ink)]">
+                        {f.body}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="pt-surface px-5 py-5 border-l-2 border-l-[var(--pt-flame)] rounded-sm">
-              <Eyebrow rule>posted comment</Eyebrow>
+              <Eyebrow rule>posted summary comment</Eyebrow>
               <div className="mt-4">
                 <MarkdownView source={data.review_body} />
               </div>
@@ -118,6 +154,37 @@ export function RevisionDrawer({
         )}
       </div>
     </Drawer>
+  );
+}
+
+function TestSignalCard({
+  inDiffSignal,
+  coverageSignal,
+  testFiles,
+  nonTestFiles,
+}: {
+  inDiffSignal: string | null;
+  coverageSignal: string | null;
+  testFiles: number | null;
+  nonTestFiles: number | null;
+}) {
+  if (!inDiffSignal && !coverageSignal) return null;
+  return (
+    <div className="pt-surface px-5 py-4">
+      <Eyebrow rule>test signals</Eyebrow>
+      <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 pt-mono text-[11px]">
+        <Field label="in-diff" value={inDiffSignal || "—"} />
+        <Field label="existing coverage" value={coverageSignal || "—"} />
+        <Field
+          label="test files"
+          value={testFiles == null ? "—" : String(testFiles)}
+        />
+        <Field
+          label="non-test files"
+          value={nonTestFiles == null ? "—" : String(nonTestFiles)}
+        />
+      </div>
+    </div>
   );
 }
 

@@ -34,6 +34,14 @@ export interface TimeseriesPoint {
   cost_usd: number;
 }
 
+export interface InlineFinding {
+  file_path: string;
+  line: number;
+  is_new_file: boolean;
+  body: string;
+  confidence: number;
+}
+
 export interface RevisionDetail {
   revision_phid: string;
   revision_id: number;
@@ -51,6 +59,12 @@ export interface RevisionDetail {
   scoring_model: string | null;
   review_model: string | null;
   review_body: string | null;
+  test_files_changed: number | null;
+  non_test_files_changed: number | null;
+  in_diff_test_signal: string | null;
+  coverage_signal: string | null;
+  inline_count: number;
+  findings: InlineFinding[];
   posted: boolean;
   posted_at: number | null;
   skipped_reason: string | null;

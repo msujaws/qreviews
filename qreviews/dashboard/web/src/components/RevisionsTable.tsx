@@ -15,6 +15,56 @@ function fmtMoney(n: number | null | undefined): string {
   return `$${Number(n).toFixed(2)}`;
 }
 
+function TestPill({
+  inDiff,
+  coverage,
+}: {
+  inDiff: string | null;
+  coverage: string | null;
+}) {
+  // Render the worst-news signal that's most useful for triage: an
+  // "uncovered" change with no in-diff tests is the cell that should
+  // pop out. Tests-only or covered-with-tests is reassuring.
+  const labels: { text: string; tone: "warn" | "ok" | "muted" }[] = [];
+  if (inDiff === "absent") {
+    labels.push({ text: "no tests", tone: "warn" });
+  } else if (inDiff === "tests_only") {
+    labels.push({ text: "tests only", tone: "ok" });
+  } else if (inDiff === "adequate") {
+    labels.push({ text: "+tests", tone: "ok" });
+  } else if (inDiff === "sparse") {
+    labels.push({ text: "few tests", tone: "muted" });
+  }
+  if (coverage === "uncovered") {
+    labels.push({ text: "uncovered", tone: "warn" });
+  } else if (coverage === "covered") {
+    labels.push({ text: "covered", tone: "ok" });
+  } else if (coverage === "partial") {
+    labels.push({ text: "partial", tone: "muted" });
+  }
+  if (labels.length === 0) {
+    return <span className="text-[var(--pt-muted)]">—</span>;
+  }
+  return (
+    <div className="flex flex-wrap gap-1">
+      {labels.map((l, i) => (
+        <span
+          key={i}
+          className={
+            l.tone === "warn"
+              ? "px-1.5 py-0.5 text-[10px] uppercase tracking-[0.1em] text-[var(--pt-flame)] border border-[var(--pt-flame)]/40 rounded-sm"
+              : l.tone === "ok"
+              ? "px-1.5 py-0.5 text-[10px] uppercase tracking-[0.1em] text-[var(--pt-ink)] border border-[var(--pt-hairline)] rounded-sm"
+              : "px-1.5 py-0.5 text-[10px] uppercase tracking-[0.1em] text-[var(--pt-muted)] border border-[var(--pt-hairline)] rounded-sm"
+          }
+        >
+          {l.text}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 export function RevisionsTable({
   rows,
   riskThreshold,
@@ -48,6 +98,8 @@ export function RevisionsTable({
                 <th className="px-6 py-3 text-left font-medium" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>title</th>
                 <th className="px-3 py-3 text-right font-medium">risk</th>
                 <th className="px-3 py-3 text-right font-medium">complex</th>
+                <th className="px-3 py-3 text-left font-medium">tests</th>
+                <th className="px-3 py-3 text-right font-medium">inlines</th>
                 <th className="px-6 py-3 text-left font-medium">status</th>
                 <th className="px-6 py-3 text-right font-medium">cost</th>
               </tr>
@@ -72,6 +124,15 @@ export function RevisionsTable({
                   </td>
                   <td className="px-3 py-3 text-right">
                     <ScoreBadge value={r.complexity} threshold={complexityThreshold} />
+                  </td>
+                  <td className="px-3 py-3 text-left">
+                    <TestPill
+                      inDiff={r.in_diff_test_signal}
+                      coverage={r.coverage_signal}
+                    />
+                  </td>
+                  <td className="px-3 py-3 text-right text-[var(--pt-muted)]">
+                    {r.inline_count || 0}
                   </td>
                   <td className="px-6 py-3">
                     <StatusPill row={r} />

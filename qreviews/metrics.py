@@ -194,8 +194,23 @@ def daily_throughput(rows: Iterable, *, days: int = 30) -> list[dict]:
 # --------------------------------------------------------------------- detail
 
 
+def _row_keys(row) -> set[str]:
+    """sqlite3.Row supports keys() but other dict-likes used in tests may not."""
+    try:
+        return set(row.keys())
+    except AttributeError:
+        return set()
+
+
 def row_to_detail(row) -> dict:
     """Serialize a single reviewed row for the dashboard / CLI."""
+    keys = _row_keys(row)
+    findings = []
+    if "findings_json" in keys and row["findings_json"]:
+        try:
+            findings = json.loads(row["findings_json"])
+        except json.JSONDecodeError:
+            findings = []
     return {
         "revision_phid": row["revision_phid"],
         "revision_id": row["revision_id"],
@@ -213,6 +228,16 @@ def row_to_detail(row) -> dict:
         "scoring_model": row["scoring_model"],
         "review_model": row["review_model"],
         "review_body": row["review_body"],
+        "test_files_changed": row["test_files_changed"] if "test_files_changed" in keys else None,
+        "non_test_files_changed": (
+            row["non_test_files_changed"] if "non_test_files_changed" in keys else None
+        ),
+        "in_diff_test_signal": (
+            row["in_diff_test_signal"] if "in_diff_test_signal" in keys else None
+        ),
+        "coverage_signal": row["coverage_signal"] if "coverage_signal" in keys else None,
+        "inline_count": (row["inline_count"] if "inline_count" in keys else 0) or 0,
+        "findings": findings,
         "posted": bool(row["posted"]),
         "posted_at": row["posted_at"],
         "skipped_reason": row["skipped_reason"],
