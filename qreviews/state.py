@@ -54,6 +54,15 @@ CREATE TABLE IF NOT EXISTS reviewed (
     final_status            TEXT,
     closed_at               INTEGER,
     human_first_response_at INTEGER,
+    -- pre-computed diff signals (see qreviews/diff_analysis.py + test_coverage.py)
+    test_files_changed      INTEGER,
+    non_test_files_changed  INTEGER,
+    in_diff_test_signal     TEXT,
+    coverage_signal         TEXT,
+    coverage_lookup_json    TEXT,
+    -- structured-output review results
+    inline_count            INTEGER DEFAULT 0,
+    findings_json           TEXT,
     PRIMARY KEY (revision_phid, diff_phid)
 );
 
@@ -120,6 +129,26 @@ class Store:
     def init_schema(self) -> None:
         conn = self.connect()
         conn.executescript(SCHEMA)
+        # SQLite ignores new column defs in CREATE TABLE IF NOT EXISTS when
+        # the table is already present, so add columns explicitly for DBs
+        # that pre-date the columns above.
+        self._migrate_reviewed_columns(conn)
+
+    def _migrate_reviewed_columns(self, conn: sqlite3.Connection) -> None:
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(reviewed)").fetchall()}
+        wanted = [
+            ("test_files_changed", "INTEGER"),
+            ("non_test_files_changed", "INTEGER"),
+            ("in_diff_test_signal", "TEXT"),
+            ("coverage_signal", "TEXT"),
+            ("coverage_lookup_json", "TEXT"),
+            ("inline_count", "INTEGER DEFAULT 0"),
+            ("findings_json", "TEXT"),
+        ]
+        for name, decl in wanted:
+            if name in existing:
+                continue
+            conn.execute(f"ALTER TABLE reviewed ADD COLUMN {name} {decl}")
 
     @contextmanager
     def txn(self) -> Iterator[sqlite3.Connection]:
@@ -208,6 +237,11 @@ class Store:
         complexity_factors: list[str],
         model: str,
         usage: dict[str, int],
+        test_files_changed: int | None = None,
+        non_test_files_changed: int | None = None,
+        in_diff_test_signal: str | None = None,
+        coverage_signal: str | None = None,
+        coverage_lookup_json: str | None = None,
     ) -> None:
         now = int(time.time())
         with self.txn() as conn:
@@ -218,7 +252,10 @@ class Store:
                     risk_factors_json=?, complexity_factors_json=?,
                     scoring_model=?,
                     scoring_input_tokens=?, scoring_output_tokens=?,
-                    scoring_cache_read=?, scoring_cache_write=?
+                    scoring_cache_read=?, scoring_cache_write=?,
+                    test_files_changed=?, non_test_files_changed=?,
+                    in_diff_test_signal=?, coverage_signal=?,
+                    coverage_lookup_json=?
                 WHERE revision_phid=? AND diff_phid=?
                 """,
                 (
@@ -232,6 +269,11 @@ class Store:
                     usage.get("output_tokens", 0),
                     usage.get("cache_read_input_tokens", 0),
                     usage.get("cache_creation_input_tokens", 0),
+                    test_files_changed,
+                    non_test_files_changed,
+                    in_diff_test_signal,
+                    coverage_signal,
+                    coverage_lookup_json,
                     revision_phid,
                     diff_phid,
                 ),
@@ -260,6 +302,8 @@ class Store:
         posted: bool,
         skipped_reason: str | None = None,
         tool_calls: int = 0,
+        inline_count: int = 0,
+        findings_json: str | None = None,
     ) -> None:
         now = int(time.time())
         with self.txn() as conn:
@@ -270,6 +314,7 @@ class Store:
                     review_input_tokens=?, review_output_tokens=?,
                     review_cache_read=?, review_cache_write=?,
                     review_tool_calls=?,
+                    inline_count=?, findings_json=?,
                     posted=?, posted_at=?, skipped_reason=?
                 WHERE revision_phid=? AND diff_phid=?
                 """,
@@ -282,6 +327,8 @@ class Store:
                     usage.get("cache_read_input_tokens", 0),
                     usage.get("cache_creation_input_tokens", 0),
                     tool_calls,
+                    inline_count,
+                    findings_json,
                     1 if posted else 0,
                     now if posted else None,
                     skipped_reason,
