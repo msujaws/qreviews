@@ -8,7 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from qreviews.scoring import _extract_json, score_revision
+from qreviews.json_utils import extract_json_object
+from qreviews.scoring import score_revision
 
 
 def _fake_response(json_text: str, usage: dict | None = None) -> SimpleNamespace:
@@ -23,17 +24,17 @@ def _fake_response(json_text: str, usage: dict | None = None) -> SimpleNamespace
     )
 
 
-def test_extract_json_plain():
-    assert _extract_json('{"a": 1}') == {"a": 1}
+def testextract_json_object_plain():
+    assert extract_json_object('{"a": 1}') == {"a": 1}
 
 
-def test_extract_json_fenced():
-    assert _extract_json('```json\n{"a": 1}\n```') == {"a": 1}
+def testextract_json_object_fenced():
+    assert extract_json_object('```json\n{"a": 1}\n```') == {"a": 1}
 
 
-def test_extract_json_with_prose():
+def testextract_json_object_with_prose():
     text = 'Sure! Here is the score:\n{"risk": 1, "complexity": 2}\nLet me know.'
-    assert _extract_json(text) == {"risk": 1, "complexity": 2}
+    assert extract_json_object(text) == {"risk": 1, "complexity": 2}
 
 
 def test_score_revision_happy_path():

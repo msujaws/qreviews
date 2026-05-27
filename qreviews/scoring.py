@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from dataclasses import dataclass, field
-from typing import Any
 
 from anthropic import Anthropic
 from pydantic import BaseModel, Field, ValidationError
+
+from qreviews.json_utils import extract_json_object
 
 log = logging.getLogger(__name__)
 
@@ -116,24 +116,6 @@ def _build_user_message(
     return f"{header}\n----- BEGIN DIFF -----\n{raw_diff}\n----- END DIFF -----\n"
 
 
-_JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
-
-
-def _extract_json(text: str) -> dict[str, Any]:
-    text = text.strip()
-    if text.startswith("```"):
-        # Strip ```json … ``` fences if Claude wrapped the JSON.
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```\s*$", "", text)
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        match = _JSON_OBJECT_RE.search(text)
-        if match:
-            return json.loads(match.group(0))
-        raise
-
-
 def score_revision(
     client: Anthropic,
     *,
@@ -171,7 +153,7 @@ def score_revision(
     text_parts = [b.text for b in response.content if getattr(b, "type", "") == "text"]
     raw_text = "".join(text_parts)
     try:
-        parsed = _extract_json(raw_text)
+        parsed = extract_json_object(raw_text)
         scores = Scores.model_validate(parsed)
     except (json.JSONDecodeError, ValidationError) as e:
         log.error("scoring response was not valid JSON: %s\n---\n%s", e, raw_text[:1000])
