@@ -41,7 +41,7 @@ def test_render_includes_scores_and_factors():
     assert "advisory only" in out.body.lower()
 
 
-def test_render_includes_dashboard_url_when_provided():
+def test_render_includes_deep_link_when_url_and_revision_id_provided():
     out = render_comment(
         revision_phid="PHID-DREV-1",
         scores=_scores(),
@@ -49,9 +49,39 @@ def test_render_includes_dashboard_url_when_provided():
         review_model="claude-sonnet-4-6",
         threshold=2,
         dashboard_url="https://qreviews.example",
+        revision_id=12345,
+    )
+    assert "https://qreviews.example/?rev=D12345" in out.body
+    assert "View this revision" in out.body
+
+
+def test_render_deep_link_strips_trailing_slash_on_base_url():
+    out = render_comment(
+        revision_phid="PHID-DREV-1",
+        scores=_scores(),
+        review_body="ok",
+        review_model="m",
+        threshold=2,
+        dashboard_url="https://qreviews.example/",
+        revision_id=7,
+    )
+    assert "https://qreviews.example/?rev=D7" in out.body
+    assert "https://qreviews.example//?rev=" not in out.body
+
+
+def test_render_falls_back_when_revision_id_missing():
+    out = render_comment(
+        revision_phid="PHID-DREV-1",
+        scores=_scores(),
+        review_body="ok",
+        review_model="claude-sonnet-4-6",
+        threshold=2,
+        dashboard_url="https://qreviews.example",
+        revision_id=None,
     )
     assert "https://qreviews.example" in out.body
     assert "Live metrics" in out.body
+    assert "?rev=" not in out.body
 
 
 def test_render_omits_dashboard_sentence_when_url_unset():
@@ -62,9 +92,11 @@ def test_render_omits_dashboard_sentence_when_url_unset():
         review_model="claude-sonnet-4-6",
         threshold=2,
         dashboard_url=None,
+        revision_id=12345,
     )
     # No dangling sentence or empty URL placeholder when unconfigured.
     assert "Live metrics" not in out.body
+    assert "View this revision" not in out.body
     assert "<>" not in out.body
     assert "None" not in out.body
 

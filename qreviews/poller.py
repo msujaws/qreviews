@@ -520,6 +520,7 @@ class Poller:
             threshold=max(risk_threshold, complexity_threshold),
             findings=review.findings,
             dashboard_url=self.config.dashboard.public_url,
+            revision_id=revision.id,
         )
 
         inlines_posted = post_review(

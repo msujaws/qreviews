@@ -85,11 +85,16 @@ def render_comment(
     threshold: int,
     findings: list[Finding] | None = None,
     dashboard_url: str | None = None,
+    revision_id: int | None = None,
 ) -> RenderedComment:
     findings = list(findings or [])
-    dashboard_sentence = (
-        f" Live metrics & per-revision details: <{dashboard_url}>." if dashboard_url else ""
-    )
+    if dashboard_url and revision_id is not None:
+        deep_url = f"{dashboard_url.rstrip('/')}/?rev=D{revision_id}"
+        dashboard_sentence = f" View this revision on the dashboard: <{deep_url}>."
+    elif dashboard_url:
+        dashboard_sentence = f" Live metrics & per-revision details: <{dashboard_url}>."
+    else:
+        dashboard_sentence = ""
     summary_text = review_body.strip()
     review_body_section = f"{summary_text}\n\n" if summary_text else ""
     body = COMMENT_TEMPLATE.format(
