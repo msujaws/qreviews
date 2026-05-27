@@ -70,6 +70,42 @@ def test_score_revision_happy_path():
     assert kwargs["system"][0]["cache_control"] == {"type": "ephemeral"}
 
 
+def test_score_revision_includes_test_signals_block():
+    client = MagicMock()
+    client.messages.create.return_value = _fake_response(
+        json.dumps(
+            {
+                "risk": 4,
+                "complexity": 2,
+                "risk_factors": ["uncovered file touched"],
+                "complexity_factors": ["small"],
+            }
+        )
+    )
+    score_revision(
+        client,
+        model="claude-haiku-4-5",
+        max_tokens=512,
+        title="t",
+        summary="s",
+        revision_id=1,
+        author_phid="u",
+        bug_id=None,
+        raw_diff="@@",
+        test_signals_block=(
+            "<test_signals>\n"
+            "  in_diff_test_signal=absent\n"
+            "  coverage_signal=uncovered\n"
+            "</test_signals>"
+        ),
+    )
+    _, kwargs = client.messages.create.call_args
+    sent_user = kwargs["messages"][0]["content"]
+    assert "<test_signals>" in sent_user
+    assert "in_diff_test_signal=absent" in sent_user
+    assert "coverage_signal=uncovered" in sent_user
+
+
 def test_score_revision_bad_json_raises():
     client = MagicMock()
     client.messages.create.return_value = _fake_response("nonsense, no json here")

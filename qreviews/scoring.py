@@ -39,6 +39,30 @@ trivial changes deserve scores of 0 or 1, not 2 or 3.
 Both axes are independent. A simple 5-line patch to a security-critical
 file is HIGH risk but LOW complexity.
 
+The user message includes a `<test_signals>` block computed
+deterministically from the diff and from a searchfox lookup over
+mozilla-central. Treat these as hints, not absolutes:
+
+  - `in_diff_test_signal=absent` means the patch adds no test
+    changes. On non-trivial non-test code, this is mildly
+    risk-increasing; on docs/CSS/string changes it does not matter.
+  - `in_diff_test_signal=tests_only` means the patch is test-only.
+    This is risk-decreasing — broken tests fail loudly without
+    affecting production.
+  - `coverage_signal=uncovered` means searchfox found no existing
+    tests in mozilla-central that reference the changed non-test
+    files. Combined with `in_diff_test_signal=absent` on a
+    sensitive area, this materially raises risk.
+  - `coverage_signal=covered` or `partial` lowers risk slightly —
+    the touched code at least has some automated check around it.
+  - `coverage_signal=skipped_*` means the lookup wasn't run
+    (large diff or searchfox unavailable). Do not let it affect
+    your score in either direction.
+
+Continue to use the full 0-10 scale; do not let the test signals
+overwhelm other risk factors (security, IPC, etc.) — they are one
+input among many.
+
 Score anchors (use these as a calibration reference, do not be afraid
 to score 0 or 1):
 
@@ -105,6 +129,7 @@ def _build_user_message(
     author_phid: str,
     bug_id: str | None,
     raw_diff: str,
+    test_signals_block: str | None = None,
 ) -> str:
     header = (
         f"Revision: D{revision_id}\n"
@@ -113,7 +138,11 @@ def _build_user_message(
         f"Bug: {bug_id or '(none)'}\n"
         f"\nSummary:\n{summary or '(no summary provided)'}\n"
     )
-    return f"{header}\n----- BEGIN DIFF -----\n{raw_diff}\n----- END DIFF -----\n"
+    signals = f"\n{test_signals_block}\n" if test_signals_block else ""
+    return (
+        f"{header}{signals}\n----- BEGIN DIFF -----\n"
+        f"{raw_diff}\n----- END DIFF -----\n"
+    )
 
 
 def score_revision(
@@ -127,6 +156,7 @@ def score_revision(
     author_phid: str,
     bug_id: str | None,
     raw_diff: str,
+    test_signals_block: str | None = None,
 ) -> ScoringResult:
     """Call Claude to compute scores. Raises on Claude or parse failure."""
     user_msg = _build_user_message(
@@ -136,6 +166,7 @@ def score_revision(
         author_phid=author_phid,
         bug_id=bug_id,
         raw_diff=raw_diff,
+        test_signals_block=test_signals_block,
     )
     response = client.messages.create(
         model=model,
