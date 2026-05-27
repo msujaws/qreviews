@@ -2,7 +2,9 @@
 
 The review model runs in a tool-use loop:
 
-  1. Send: SKILL.md system prompt + revision metadata + diff + tools.
+  1. Send: structured system prompt (role + process + tool guidance +
+     output format + examples + area-skill body) + revision metadata
+     + diff + tools.
   2. Receive: a response that may contain tool_use blocks (read_file,
      find_definition, find_callers, find_callees, search_code).
   3. Execute each requested tool via `qreviews.searchfox` and append the
@@ -10,12 +12,18 @@ The review model runs in a tool-use loop:
   4. Repeat until the response has `stop_reason == "end_turn"` (no more tool
      calls) or we hit the max-iterations cap.
 
+The final turn is expected to be a single fenced JSON object naming the
+inline findings and any remaining narrative summary; see
+`REVIEW_OUTPUT_FORMAT` and `parse_review_payload` below. If the response
+doesn't parse, we fall back to posting the raw text as summary-only.
+
 Token usage is aggregated across all turns so the metrics dashboard reflects
 the true cost.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -23,72 +31,213 @@ from typing import Any
 
 from anthropic import Anthropic
 
+from qreviews.json_utils import extract_json_object
 from qreviews.searchfox import TOOL_SCHEMAS, execute_tool, has_searchfox
 from qreviews.skills import load_skill
 
 log = logging.getLogger(__name__)
 
 
-REVIEW_INTRO = """\
+REVIEW_ROLE = """\
 You are reviewing a Mozilla Firefox patch on Phabricator on behalf of an
-overloaded human reviewer group. Below is durable, area-specific guidance you
-must apply. The patch was already gated as LOW RISK and LOW COMPLEXITY, so
-your review should focus on:
-
-  - Concrete actionable findings (bugs, lint/style issues called out by the
-    guidance, missed conventions). Be specific — quote the file and line.
-  - Confirming what looks good. The bot's comment is posted publicly to the
-    revision and is read by a human; explicit "this looks fine because …"
-    helps the human ratify it quickly.
-  - Cite all findings using the form `path/to/file.ext:LINE` so reviewers can
-    jump to them.
+overloaded human reviewer group. The patch was already gated as LOW RISK
+and LOW COMPLEXITY by a separate scoring pass — your job is to surface
+concrete issues a human reviewer would want flagged, not to re-litigate
+whether the patch should land at all. A human will read your review and
+either ratify it or override it; you are advisory.
 
 """
 
-# Included only when searchfox-cli is actually available. If we advertise the
-# tools but they fail at runtime, Claude apologises in the review body — and
-# that apology gets posted to Phabricator. See has_searchfox() probe below.
+
+REVIEW_PROCESS = """\
+## Review process
+
+Follow this systematic approach:
+
+**Step 1 — Analyze the changes.** Read the patch summary for context,
+then focus on the diff itself. Identify the intent and structure of
+the changes. The pre-computed `<test_signals>` block in the user
+message tells you whether the patch includes tests and whether
+existing tests in the tree reference the touched files — incorporate
+that into your judgement.
+
+**Step 2 — Identify issues.** Look for bugs, logical errors,
+performance problems, security vulnerabilities, and violations of
+the area-specific guidance below. Focus ONLY on new or changed lines
+(those that begin with `+`). Never comment on unmodified context
+lines.
+
+Prioritize issues in this order:
+  Security vulnerabilities > Functional bugs > Performance issues >
+  Style / readability concerns.
+
+**Step 3 — Verify and assess confidence.** Use the available tools
+when you need to verify a concern or gather additional context. Only
+include a finding when you are at least 80% confident the issue is
+valid. When in doubt, verify before flagging.
+
+**Step 4 — Sort by confidence and importance.** Lead with the issues
+you are most certain about and that matter most. Drop borderline
+items rather than padding the review.
+
+**Step 5 — Write clear, direct comments.** Use declarative language:
+state the problem, then suggest the fix. Use directive verbs: "Fix",
+"Remove", "Change", "Add". NEVER use these hedging phrases: "maybe",
+"might want to", "consider", "possibly", "could be", "you may want
+to". Each comment should be short and specific.
+
+## What NOT to include
+
+Do not write findings that:
+  - Refer to unmodified code (lines without a `+` prefix).
+  - Ask for verification or confirmation (e.g. "Check if…", "Ensure
+    that…").
+  - Provide praise or restate obvious facts.
+  - Flag style preferences without a clear coding-standard
+    violation.
+  - Point out issues that the visible code already handles.
+
+One exception: if the `<test_signals>` block reports
+`coverage_signal=uncovered` AND the patch touches non-trivial logic,
+it IS appropriate to surface "no test coverage on this change" as a
+finding — that is a code-quality concern, not a generic testing
+nit.
+
+"""
+
+
 REVIEW_TOOL_GUIDANCE = """\
-You have searchfox tools that let you read any file in mozilla-central and
-follow symbols. Use them BEFORE flagging something as a potential issue.
-Specifically:
+## Tool use
 
-  - If you're about to say "X may not be defined", first call
-    `find_definition` or `search_code` to check whether it actually exists.
-  - If you're about to flag a signature/API change as risky, call
+You have searchfox tools that let you read any file in mozilla-central
+and follow symbols. Use them BEFORE flagging something as a potential
+issue:
+
+  - About to say "X may not be defined"? Call `find_definition` or
+    `search_code` to confirm.
+  - About to flag a signature/API change as risky? Call
     `find_callers` to see who calls the affected symbol.
-  - If you want to read more context around a changed line, call `read_file`
-    with a line range — the diff alone often hides the surrounding shape.
+  - Want to see more context around a changed line? Call `read_file`
+    with a line range.
+  - The `<test_signals>` block reports `coverage_signal=partial` or
+    `uncovered`? You may run a path-scoped `search_code` against
+    `tests/`, `mochitest/`, `xpcshell/`, etc. to confirm before
+    raising missing-coverage as a finding.
 
-You don't need to use the tools for every finding — only when verifying
-something the diff alone can't answer. Aim for 0–5 tool calls per review;
-more than that and you're probably exploring rather than reviewing.
+Aim for 0-5 tool calls per review. More than that and you're
+exploring rather than reviewing.
+
+"""
+
+
+REVIEW_OUTPUT_FORMAT = """\
+## Output format
+
+End your response with a single fenced JSON object — no prose before
+or after. The JSON object must match this exact schema:
+
+```json
+{
+  "summary": "<markdown summary of the review; can be empty>",
+  "findings": [
+    {
+      "file_path": "path/to/file.ext",
+      "line": <integer line number>,
+      "is_new_file": <true if `line` refers to the new (+) side, false if the old (-) side>,
+      "body": "<the comment to post inline at this line>",
+      "confidence": <float 0.0-1.0>
+    }
+  ]
+}
+```
+
+Rules for the output:
+
+  - Each finding's `(file_path, line, is_new_file)` MUST name a line
+    that actually appears in a diff hunk. Inventing line numbers is
+    worse than dropping the finding.
+  - For findings about added or modified code, use `is_new_file:
+    true` and the new-side line number.
+  - Use `summary` ONLY for findings that genuinely cannot be pinned
+    to a single line (e.g. "this commit lacks a corresponding test
+    file"). If every finding fits inline, leave `summary` empty.
+  - Do NOT include any praise, status statements, or "I approve"
+    language in `summary`. Do NOT mention scores or risk levels.
+  - If there are no findings, return an empty array and an empty
+    summary string.
 
 """
 
-REVIEW_OUTRO = """\
-Format your final output as GitHub-flavored Markdown suitable for posting as
-a Phabricator comment. Use level-3 headings (###) for sections. Keep it under
-500 words. Do NOT include scores, do NOT say "I approve" or "looks good to
-land" — your job is to surface findings; the human approves.
 
-Lead with a one-sentence overall summary, then a section of findings (or
-"no findings" if appropriate), then a section listing what looks good.
+REVIEW_EXAMPLES = """\
+## Style examples (Mozilla code)
 
------ BEGIN AREA REVIEW GUIDANCE -----
+Three examples of well-formed inline findings. Match this voice —
+declarative, no hedging.
+
+**Example 1** (memory efficiency, C++):
+file_path: netwerk/streamconv/converters/mozTXTToHTMLConv.cpp
+line: 1211
+body: `nsAutoStringN<256>` has a fixed size. Confirm `tempString`
+cannot exceed 256 characters before assuming the small-buffer
+optimization holds.
+
+**Example 2** (performance, JS):
+file_path: toolkit/components/extensions/ExtensionDNR.sys.mjs
+line: 1837
+body: `filterAAR` is recreated on every call to
+`#updateAllowAllRequestRules`. Move the definition out of the
+method so it's allocated once.
+
+**Example 3** (readability, JS):
+file_path: devtools/shared/network-observer/NetworkUtils.sys.mjs
+line: 496
+body: Extract `!Components.isSuccessCode(status) &&
+blockList.includes(ChromeUtils.getXPCOMErrorName(status))` into a
+named helper like `isBlockedError(status)` to make the condition
+self-describing.
 
 """
+
+
+REVIEW_AREA_GUIDANCE_HEADER = "----- BEGIN AREA REVIEW GUIDANCE -----\n\n"
+
+SUPPLEMENTAL_SKILLS_HEADER = (
+    "\n\n---\n\n"
+    "## Additional reviewer-group context\n\n"
+    "This revision is also tagged with other reviewer groups whose "
+    "rubrics are included below. Treat them as supplementary guidance "
+    "alongside the primary area review guidance above; surface findings "
+    "that any of them would care about.\n\n"
+)
 
 
 MAX_TOOL_ITERATIONS = 8
 
 
 @dataclass
-class ReviewResult:
+class Finding:
+    file_path: str
+    line: int
+    is_new_file: bool
     body: str
-    model: str
+    confidence: float = 0.0
+
+
+@dataclass
+class ReviewResult:
+    summary: str
+    findings: list[Finding] = field(default_factory=list)
+    model: str = ""
     usage: dict[str, int] = field(default_factory=dict)
     tool_calls: int = 0
+    # True when we couldn't parse a structured JSON object out of
+    # the final response. The caller then posts `summary` (which is
+    # the raw text) as a summary-only comment.
+    parse_failed: bool = False
+    # Findings the model named but that didn't match a legal diff
+    # anchor; their bodies were appended to `summary`.
+    rejected_count: int = 0
 
 
 def _build_user_message(
@@ -99,6 +248,7 @@ def _build_user_message(
     author_phid: str,
     bug_id: str | None,
     raw_diff: str,
+    test_signals_block: str | None = None,
 ) -> str:
     header = (
         f"Revision: D{revision_id}\n"
@@ -107,7 +257,11 @@ def _build_user_message(
         f"Bug: {bug_id or '(none)'}\n"
         f"\nSummary:\n{summary or '(no summary provided)'}\n"
     )
-    return f"{header}\n----- BEGIN DIFF -----\n{raw_diff}\n----- END DIFF -----\n"
+    signals = f"\n{test_signals_block}\n" if test_signals_block else ""
+    return (
+        f"{header}{signals}\n----- BEGIN DIFF -----\n"
+        f"{raw_diff}\n----- END DIFF -----\n"
+    )
 
 
 def _add_usage(into: dict[str, int], response_usage) -> None:
@@ -130,14 +284,81 @@ def _final_text(content_blocks: list[Any]) -> str:
     return "".join(parts).strip()
 
 
-SUPPLEMENTAL_SKILLS_HEADER = (
-    "\n\n---\n\n"
-    "## Additional reviewer-group context\n\n"
-    "This revision is also tagged with other reviewer groups whose "
-    "rubrics are included below. Treat them as supplementary guidance "
-    "alongside the primary area review guidance above; surface findings "
-    "that any of them would care about.\n\n"
-)
+def parse_review_payload(
+    raw_text: str,
+    *,
+    legal_anchors: frozenset[tuple[str, int, bool]] | None = None,
+) -> ReviewResult:
+    """Parse Claude's final response into a structured ReviewResult.
+
+    Falls back to summary-only (with `parse_failed=True`) when the text
+    isn't a valid JSON object. When `legal_anchors` is provided, findings
+    whose `(file_path, line, is_new_file)` triple isn't in the set are
+    rejected and their `body` text is appended to the summary so nothing
+    is silently lost.
+    """
+    try:
+        payload = extract_json_object(raw_text)
+    except json.JSONDecodeError:
+        log.warning("review response was not parseable JSON; falling back to summary-only")
+        return ReviewResult(summary=raw_text.strip(), parse_failed=True)
+
+    summary = str(payload.get("summary") or "").strip()
+    raw_findings = payload.get("findings") or []
+    accepted: list[Finding] = []
+    rejected_bodies: list[str] = []
+    rejected_count = 0
+
+    if not isinstance(raw_findings, list):
+        log.warning("review payload.findings was not a list; ignoring")
+        raw_findings = []
+
+    for item in raw_findings:
+        if not isinstance(item, dict):
+            continue
+        file_path = str(item.get("file_path") or "").strip()
+        try:
+            line = int(item.get("line"))
+        except (TypeError, ValueError):
+            continue
+        is_new_file = bool(item.get("is_new_file", True))
+        body = str(item.get("body") or "").strip()
+        try:
+            confidence = float(item.get("confidence") or 0.0)
+        except (TypeError, ValueError):
+            confidence = 0.0
+        if not file_path or not body or line <= 0:
+            continue
+
+        anchor = (file_path, line, is_new_file)
+        if legal_anchors is not None and anchor not in legal_anchors:
+            rejected_count += 1
+            rejected_bodies.append(f"- `{file_path}:{line}` — {body}")
+            log.info("review finding rejected (no anchor): %s:%d new=%s", file_path, line, is_new_file)
+            continue
+
+        accepted.append(
+            Finding(
+                file_path=file_path,
+                line=line,
+                is_new_file=is_new_file,
+                body=body,
+                confidence=confidence,
+            )
+        )
+
+    if rejected_bodies:
+        appendix = (
+            "\n\n_Findings that could not be anchored to a specific diff line:_\n"
+            + "\n".join(rejected_bodies)
+        )
+        summary = (summary + appendix).strip()
+
+    return ReviewResult(
+        summary=summary,
+        findings=accepted,
+        rejected_count=rejected_count,
+    )
 
 
 def generate_review(
@@ -155,6 +376,8 @@ def generate_review(
     additional_skill_paths: Sequence[str] = (),
     max_iterations: int = MAX_TOOL_ITERATIONS,
     enable_tools: bool = True,
+    test_signals_block: str | None = None,
+    legal_anchors: frozenset[tuple[str, int, bool]] | None = None,
 ) -> ReviewResult:
     if enable_tools and not has_searchfox():
         log.warning(
@@ -163,10 +386,10 @@ def generate_review(
         enable_tools = False
 
     skill_body = load_skill(skill_path)
-    system_parts = [REVIEW_INTRO]
+    system_parts = [REVIEW_ROLE, REVIEW_PROCESS]
     if enable_tools:
         system_parts.append(REVIEW_TOOL_GUIDANCE)
-    system_parts.extend([REVIEW_OUTRO, skill_body])
+    system_parts.extend([REVIEW_OUTPUT_FORMAT, REVIEW_EXAMPLES, REVIEW_AREA_GUIDANCE_HEADER, skill_body])
     system_text = "".join(system_parts)
     if additional_skill_paths:
         supplemental_bodies = [load_skill(p) for p in additional_skill_paths]
@@ -179,6 +402,7 @@ def generate_review(
         author_phid=author_phid,
         bug_id=bug_id,
         raw_diff=raw_diff,
+        test_signals_block=test_signals_block,
     )
 
     messages: list[dict[str, Any]] = [{"role": "user", "content": user_msg}]
@@ -188,6 +412,7 @@ def generate_review(
 
     tools_param: list[dict[str, Any]] | None = TOOL_SCHEMAS if enable_tools else None
 
+    response = None
     for _iteration in range(max_iterations):
         kwargs: dict[str, Any] = {
             "model": model,
@@ -211,10 +436,14 @@ def generate_review(
         tool_uses = [b for b in response.content if getattr(b, "type", "") == "tool_use"]
 
         if not tool_uses or response.stop_reason != "tool_use":
-            body = _final_text(response.content)
-            return ReviewResult(
-                body=body, model=model, usage=aggregated_usage, tool_calls=tool_calls
+            result = parse_review_payload(
+                _final_text(response.content),
+                legal_anchors=legal_anchors,
             )
+            result.model = model
+            result.usage = aggregated_usage
+            result.tool_calls = tool_calls
+            return result
 
         # Append the assistant turn (with the tool_use blocks) and the tool results.
         messages.append(
@@ -246,10 +475,16 @@ def generate_review(
 
     # Hit iteration cap — return what we have plus a note.
     log.warning("review hit max tool iterations (%d)", max_iterations)
-    return ReviewResult(
-        body=_final_text(response.content)
-        or "(review exceeded tool iteration limit; no final answer produced)",
-        model=model,
-        usage=aggregated_usage,
-        tool_calls=tool_calls,
+    fallback_text = (
+        _final_text(response.content)
+        if response is not None
+        else "(review exceeded tool iteration limit; no final answer produced)"
     )
+    result = parse_review_payload(fallback_text, legal_anchors=legal_anchors)
+    if not result.summary and not result.findings:
+        result.summary = "(review exceeded tool iteration limit; no final answer produced)"
+        result.parse_failed = True
+    result.model = model
+    result.usage = aggregated_usage
+    result.tool_calls = tool_calls
+    return result
