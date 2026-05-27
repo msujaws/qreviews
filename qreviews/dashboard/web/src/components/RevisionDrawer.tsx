@@ -52,7 +52,7 @@ export function RevisionDrawer({
           <>
             <div className="flex items-start justify-between gap-6">
               <div>
-                <Eyebrow>differential revision</Eyebrow>
+                <Eyebrow>Differential revision</Eyebrow>
                 <div className="mt-2 pt-numeral text-[40px] leading-none">
                   D{data.revision_id}
                 </div>
@@ -63,33 +63,33 @@ export function RevisionDrawer({
                     rel="noreferrer"
                     className="text-[var(--pt-flame)] border-b border-dotted border-[var(--pt-flame)]/60 hover:border-[var(--pt-flame)]"
                   >
-                    open in phabricator →
+                    Open in Phabricator →
                   </a>
                 </div>
               </div>
               <button
                 onClick={onClose}
                 className="pt-mono text-[12px] text-[var(--pt-muted)] hover:text-[var(--pt-ink)] uppercase tracking-[0.12em] cursor-pointer"
-                aria-label="close drawer"
+                aria-label="Close drawer"
               >
-                close ✕
+                Close ✕
               </button>
             </div>
 
             <div className="pt-surface px-5 py-4">
-              <Eyebrow rule>title</Eyebrow>
+              <Eyebrow rule>Title</Eyebrow>
               <div className="mt-3 text-[15px] leading-[1.5] text-[var(--pt-ink)]">
                 {data.title || "—"}
               </div>
               <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 pt-mono text-[11px]">
-                <Field label="group" value={data.group_slug} />
-                <Field label="author" value={data.author_phid || "—"} mono />
-                <Field label="created" value={fmtTs(data.revision_created_at)} />
-                <Field label="seen" value={fmtTs(data.seen_at)} />
-                <Field label="posted" value={fmtTs(data.posted_at)} />
-                <Field label="cost" value={fmtMoney(data.estimated_cost_usd)} />
-                <Field label="scoring" value={data.scoring_model || "—"} mono />
-                <Field label="review" value={data.review_model || "—"} mono />
+                <Field label="Group" value={data.group_slug} />
+                <Field label="Author" value={data.author_phid || "—"} mono />
+                <Field label="Created" value={fmtTs(data.revision_created_at)} />
+                <Field label="Seen" value={fmtTs(data.seen_at)} />
+                <Field label="Posted" value={fmtTs(data.posted_at)} />
+                <Field label="Cost" value={fmtMoney(data.estimated_cost_usd)} />
+                <Field label="Scoring" value={data.scoring_model || "—"} mono />
+                <Field label="Review" value={data.review_model || "—"} mono />
               </div>
             </div>
 
@@ -117,7 +117,7 @@ export function RevisionDrawer({
 
             {data.findings && data.findings.length > 0 && (
               <div className="pt-surface px-5 py-5">
-                <Eyebrow rule>inline findings ({data.findings.length})</Eyebrow>
+                <Eyebrow rule>Inline findings ({data.findings.length})</Eyebrow>
                 <ul className="mt-4 space-y-3">
                   {data.findings.map((f, i) => (
                     <li key={i} className="border-l-2 border-[var(--pt-flame)]/60 pl-3">
@@ -129,10 +129,10 @@ export function RevisionDrawer({
                           className="text-[var(--pt-flame)] border-b border-dotted border-[var(--pt-flame)]/60 hover:border-[var(--pt-flame)]"
                         >
                           {f.file_path}:{f.line}
-                          {f.is_new_file ? "" : " (old)"}
+                          {f.is_new_file ? "" : " (old side)"}
                         </a>
                         <span className="ml-2 text-[var(--pt-muted)]">
-                          confidence {Math.round((f.confidence || 0) * 100)}%
+                          Confidence {Math.round((f.confidence || 0) * 100)}%
                         </span>
                       </div>
                       <div className="mt-1 text-[13px] leading-[1.5] text-[var(--pt-ink)]">
@@ -145,7 +145,7 @@ export function RevisionDrawer({
             )}
 
             <div className="pt-surface px-5 py-5 border-l-2 border-l-[var(--pt-flame)] rounded-sm">
-              <Eyebrow rule>posted summary comment</Eyebrow>
+              <Eyebrow rule>Posted summary comment</Eyebrow>
               <div className="mt-4">
                 <MarkdownView source={data.review_body} />
               </div>
@@ -171,16 +171,16 @@ function TestSignalCard({
   if (!inDiffSignal && !coverageSignal) return null;
   return (
     <div className="pt-surface px-5 py-4">
-      <Eyebrow rule>test signals</Eyebrow>
+      <Eyebrow rule>Test signals</Eyebrow>
       <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 pt-mono text-[11px]">
-        <Field label="in-diff" value={inDiffSignal || "—"} />
-        <Field label="existing coverage" value={coverageSignal || "—"} />
+        <Field label="In-diff" value={inDiffSignal || "—"} />
+        <Field label="Existing coverage" value={coverageSignal || "—"} />
         <Field
-          label="test files"
+          label="Test files"
           value={testFiles == null ? "—" : String(testFiles)}
         />
         <Field
-          label="non-test files"
+          label="Non-test files"
           value={nonTestFiles == null ? "—" : String(nonTestFiles)}
         />
       </div>
@@ -213,7 +213,7 @@ function ScoreCard({ axis, value, threshold, factors }: ScoreCardProps) {
       </div>
       <ul className="mt-3 space-y-1.5 pt-mono text-[12px] text-[var(--pt-ink)]/85 list-disc list-inside">
         {factors.length === 0 ? (
-          <li className="text-[var(--pt-muted)] italic">(none recorded)</li>
+          <li className="text-[var(--pt-muted)] italic">None recorded</li>
         ) : (
           factors.map((f, i) => <li key={i}>{f}</li>)
         )}

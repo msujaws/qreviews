@@ -20,9 +20,9 @@ export function HistogramChart({ data, riskThreshold, complexityThreshold }: Pro
   return (
     <section className="pt-surface px-6 py-6 flex flex-col gap-5 min-h-[280px]">
       <div className="flex items-baseline justify-between gap-4">
-        <Eyebrow rule>score distribution</Eyebrow>
+        <Eyebrow rule>Score distribution</Eyebrow>
         <div className="pt-mono text-[11px] text-[var(--pt-muted)]">
-          gate: r&lt;{riskThreshold} · c&lt;{complexityThreshold}
+          Gate: risk &lt;{riskThreshold} · complexity &lt;{complexityThreshold}
         </div>
       </div>
       {!hasData ? (
@@ -54,7 +54,7 @@ export function HistogramChart({ data, riskThreshold, complexityThreshold }: Pro
 function EmptyState() {
   return (
     <div className="h-[220px] pt-grid-dotted flex items-center justify-center">
-      <span className="pt-mono text-[12px] text-[var(--pt-muted)]">no scores recorded yet</span>
+      <span className="pt-mono text-[12px] text-[var(--pt-muted)]">No scores recorded yet</span>
     </div>
   );
 }

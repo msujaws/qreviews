@@ -76,16 +76,16 @@ export function RevisionsTable({
   return (
     <section className="pt-surface flex flex-col">
       <div className="px-6 py-5 flex items-baseline justify-between border-b border-[var(--pt-hairline)]">
-        <Eyebrow>recent revisions</Eyebrow>
+        <Eyebrow>Recent revisions</Eyebrow>
         <span className="pt-mono text-[11px] text-[var(--pt-muted)]">
-          click row · details &gt;
+          Click a row for details
         </span>
       </div>
 
       {data.length === 0 ? (
         <div className="px-6 py-16 pt-grid-dotted">
           <div className="pt-mono text-[12px] text-[var(--pt-muted)] text-center">
-            no revisions yet — the poller hasn't recorded anything.
+            No revisions recorded yet.
           </div>
         </div>
       ) : (
@@ -93,15 +93,15 @@ export function RevisionsTable({
           <table className="w-full text-sm pt-mono">
             <thead>
               <tr className="text-[10px] uppercase tracking-[0.14em] text-[var(--pt-muted)]">
-                <th className="px-6 py-3 text-left font-medium">revision</th>
-                <th className="px-6 py-3 text-left font-medium">group</th>
-                <th className="px-6 py-3 text-left font-medium" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>title</th>
-                <th className="px-3 py-3 text-right font-medium">risk</th>
-                <th className="px-3 py-3 text-right font-medium">complex</th>
-                <th className="px-3 py-3 text-left font-medium">tests</th>
-                <th className="px-3 py-3 text-right font-medium">inlines</th>
-                <th className="px-6 py-3 text-left font-medium">status</th>
-                <th className="px-6 py-3 text-right font-medium">cost</th>
+                <th className="px-6 py-3 text-left font-medium">Revision</th>
+                <th className="px-6 py-3 text-left font-medium">Group</th>
+                <th className="px-6 py-3 text-left font-medium" style={{ fontFamily: "'IBM Plex Sans', sans-serif" }}>Title</th>
+                <th className="px-3 py-3 text-right font-medium">Risk</th>
+                <th className="px-3 py-3 text-right font-medium">Complexity</th>
+                <th className="px-3 py-3 text-left font-medium">Tests</th>
+                <th className="px-3 py-3 text-right font-medium">Inlines</th>
+                <th className="px-6 py-3 text-left font-medium">Status</th>
+                <th className="px-6 py-3 text-right font-medium">Cost</th>
               </tr>
             </thead>
             <tbody>

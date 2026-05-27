@@ -5,7 +5,7 @@ export function MarkdownView({ source }: { source: string | null | undefined }) 
   if (!source) {
     return (
       <div className="pt-mono text-[12px] text-[var(--pt-muted)] italic">
-        no comment was posted for this revision.
+        No comment posted for this revision.
       </div>
     );
   }
