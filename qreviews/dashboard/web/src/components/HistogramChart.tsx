@@ -35,7 +35,7 @@ export function HistogramChart({ data, riskThreshold, complexityThreshold }: Pro
           withLegend
           legendProps={{ verticalAlign: "bottom", height: 24 }}
           gridAxis="y"
-          gridColor="rgba(232, 236, 244, 0.06)"
+          gridColor="color-mix(in srgb, var(--pt-ink) 6%, transparent)"
           textColor="var(--pt-muted)"
           tickLine="none"
           series={[

@@ -12,6 +12,7 @@
     "@fontsource/ibm-plex-mono": "^5.0.13",
     "@fontsource/ibm-plex-sans": "^5.0.20",
     "@fontsource/ibm-plex-serif": "^5.0.13",
+    "@fontsource/knewave": "^5.2.7",
     "@mantine/charts": "^7.13.0",
     "@mantine/core": "^7.13.0",
     "@mantine/hooks": "^7.13.0",

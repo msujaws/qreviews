@@ -1,40 +1,43 @@
 import { createTheme, MantineColorsTuple, rem } from "@mantine/core";
 
+// Single flame tuple that bridges the dark-mode (Sunset coral) and
+// light-mode (Daybreak orange) primaries. Mantine picks shade 5 in dark
+// mode and shade 6 in light mode via `primaryShade`.
 const flame: MantineColorsTuple = [
-  "#fff1ea",
-  "#ffe0d0",
-  "#ffbfa3",
-  "#ff9c73",
-  "#ff7e4c",
-  "#ff6a3d",
-  "#ff5e2f",
-  "#e44d22",
-  "#cc4319",
-  "#a8330e",
+  "#fff1e6", // 0
+  "#ffe0cc", // 1
+  "#ffc2a3", // 2
+  "#ffa380", // 3
+  "#ff8c66", // 4
+  "#ff7a59", // 5 — Sunset coral (dark mode primary)
+  "#f97316", // 6 — Daybreak orange (light mode primary)
+  "#e35d0c", // 7
+  "#b94808", // 8
+  "#8b3506", // 9
 ];
 
-// Override Mantine's "dark" scale with our Pacific Terminal navy palette.
-// Index 7 is the page background per Mantine's dark theme conventions.
-const navy: MantineColorsTuple = [
-  "#E8ECF4", // 0 — lightest ink
-  "#C9D0DE",
-  "#A4ADBF",
-  "#7F8AA0",
-  "#5C6478", // 4 — muted
-  "#3F4659",
-  "#2A3145",
-  "#0B1220", // 7 — page background
-  "#080E1A", // 8 — deeper
-  "#050912", // 9 — deepest
+// Dark scale used by Mantine in dark mode for internal surfaces. Index 7
+// is the page background per Mantine convention.
+const dark: MantineColorsTuple = [
+  "#F4F7FF", // 0 — lightest ink
+  "#D7DDF0",
+  "#B6BFDA",
+  "#8A93AE", // 3 — muted
+  "#6F7894",
+  "#515973",
+  "#313A56",
+  "#0E1426", // 7 — page background
+  "#0A0F1F", // 8 — deeper
+  "#060A18", // 9 — deepest
 ];
 
 export const theme = createTheme({
   primaryColor: "flame",
-  primaryShade: 5,
+  primaryShade: { light: 6, dark: 5 },
   defaultRadius: "sm",
   colors: {
     flame,
-    dark: navy,
+    dark,
   },
   fontFamily: '"IBM Plex Sans", system-ui, -apple-system, sans-serif',
   fontFamilyMonospace: '"IBM Plex Mono", ui-monospace, SFMono-Regular, monospace',
@@ -47,15 +50,6 @@ export const theme = createTheme({
       h3: { fontSize: rem(24), lineHeight: "1.2" },
     },
   },
-  white: "#E8ECF4",
-  black: "#0B1220",
-  other: {
-    surface: "#121A2B",
-    surfaceRaised: "#172037",
-    hairline: "rgba(232, 236, 244, 0.08)",
-    ok: "#3DDC97",
-    warn: "#F2C94C",
-    danger: "#F59E0B",
-    info: "#5B9EFF",
-  },
+  white: "#FFFFFF",
+  black: "#0E1426",
 });

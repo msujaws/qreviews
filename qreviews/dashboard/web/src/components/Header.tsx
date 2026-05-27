@@ -1,5 +1,6 @@
 import { Select } from "@mantine/core";
 import type { Group } from "../types";
+import { ThemeToggle } from "./ThemeToggle";
 
 interface Props {
   groups: Group[] | undefined;
@@ -19,7 +20,7 @@ export function Header({ groups, selected, onChange }: Props) {
             alt="QualReviews quail mascot"
             width={88}
             height={88}
-            className="shrink-0 drop-shadow-[0_4px_18px_rgba(255,106,61,0.25)]"
+            className="shrink-0 pt-flame-glow"
             style={{ imageRendering: "auto" }}
           />
           <div>
@@ -37,20 +38,23 @@ export function Header({ groups, selected, onChange }: Props) {
             </div>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <span className="pt-eyebrow">reviewer · group</span>
-          <Select
-            data={options}
-            value={selected}
-            onChange={onChange}
-            placeholder="all groups"
-            clearable
-            allowDeselect
-            w={240}
-            classNames={{
-              input: "pt-mono",
-            }}
-          />
+        <div className="flex items-start gap-3">
+          <div className="flex flex-col items-end gap-2">
+            <span className="pt-eyebrow">reviewer · group</span>
+            <Select
+              data={options}
+              value={selected}
+              onChange={onChange}
+              placeholder="all groups"
+              clearable
+              allowDeselect
+              w={240}
+              classNames={{
+                input: "pt-mono",
+              }}
+            />
+          </div>
+          <ThemeToggle />
         </div>
       </div>
     </header>

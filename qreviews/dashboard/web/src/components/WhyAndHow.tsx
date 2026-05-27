@@ -54,8 +54,7 @@ const NEXT_STEPS_URL = `${SOURCE_URL}#next-steps`;
 
 export function WhyAndHow() {
   const [opened, { toggle }] = useDisclosure(true);
-  const linkCls =
-    "text-[var(--pt-flame)] border-b border-dotted border-[rgba(255,106,61,0.6)] hover:border-[var(--pt-flame)] transition-colors";
+  const linkCls = "pt-link";
 
   return (
     <section className="flex flex-col gap-5">

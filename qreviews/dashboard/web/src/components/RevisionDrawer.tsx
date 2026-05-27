@@ -37,7 +37,7 @@ export function RevisionDrawer({
       size="lg"
       withCloseButton={false}
       padding={0}
-      overlayProps={{ backgroundOpacity: 0.7, color: "#0B1220" }}
+      overlayProps={{ backgroundOpacity: 0.7, color: "var(--pt-bg)" }}
       styles={{
         content: { background: "var(--pt-bg)" },
         body: { padding: 0, background: "var(--pt-bg)" },

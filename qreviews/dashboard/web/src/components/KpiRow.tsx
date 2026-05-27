@@ -44,7 +44,7 @@ function Cell({ label, value, caption, highlight = false }: CellProps) {
     <div className="flex flex-col gap-3 px-6 py-7 pt-surface">
       <Eyebrow rule>{label}</Eyebrow>
       <div
-        className="pt-numeral"
+        className="pt-numeral pt-numeral--display"
         style={{
           fontSize: "clamp(54px, 6vw, 84px)",
           color: highlight ? "var(--pt-flame)" : "var(--pt-ink)",

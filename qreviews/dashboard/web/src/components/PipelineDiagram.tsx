@@ -2,7 +2,7 @@ const INK = "var(--pt-ink)";
 const MUTED = "var(--pt-muted)";
 const FLAME = "var(--pt-flame)";
 const SURFACE = "var(--pt-surface)";
-const HAIRLINE = "rgba(232, 236, 244, 0.22)";
+const HAIRLINE = "color-mix(in srgb, var(--pt-ink) 22%, transparent)";
 
 const VIEW_W = 820;
 const VIEW_H = 400;
