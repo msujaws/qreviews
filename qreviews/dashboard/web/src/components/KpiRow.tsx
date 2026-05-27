@@ -11,8 +11,8 @@ function fmt(n: number | null | undefined, suffix = ""): string {
 }
 
 function fmtPair(a: number | null | undefined, b: number | null | undefined): string {
-  const left = a == null ? "—" : a.toString();
-  const right = b == null ? "—" : b.toString();
+  const left = a == null ? "—" : Math.round(a).toString();
+  const right = b == null ? "—" : Math.round(b).toString();
   return `${left}/${right}`;
 }
 
