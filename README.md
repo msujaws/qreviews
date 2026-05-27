@@ -121,9 +121,9 @@ adds three opt-in axes that let teams ramp up trust gradually:
   and broaden coverage explicitly when they're ready.
 
 Each axis is per-group configuration in `config.yaml`. Teams adopt
-the behaviors they want and leave the rest off. As thresholds,
+the behaviors they want and leave the rest off. **As thresholds,
 rubrics, and membership gates settle out, the patterns are intended
-to land upstream in the built-in reviewer.
+to land upstream in the built-in reviewer.**
 
 ---
 

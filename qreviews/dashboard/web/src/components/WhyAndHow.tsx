@@ -188,9 +188,11 @@ export function WhyAndHow() {
             </ul>
             <p className="text-[15px] leading-[1.7] text-[var(--pt-ink)]">
               Each axis is per-group configuration. Teams adopt the
-              behaviors they want and leave the rest off. The patterns
-              that prove out here are intended to fold back upstream
-              into the built-in reviewer.
+              behaviors they want and leave the rest off.{" "}
+              <strong>
+                The patterns that prove out here are intended to fold
+                back upstream into the built-in reviewer.
+              </strong>
             </p>
           </div>
 
