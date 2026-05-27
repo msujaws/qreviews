@@ -44,6 +44,16 @@ can read in isolation.
 - `deploy/` — launchd plist + install/uninstall scripts for autonomous
   polling on macOS.
 
+## Writing style
+
+User-facing prose in this repo — dashboard strings, the posted comment
+wrapper, the review prompt, contributor docs — follows the
+Mozilla-bug-grounded voice codified in `docs/STYLE.md`. Direct and
+declarative, active voice, sentence-case fragments without terminal
+punctuation for labels/headings, no emoji, no hedging phrases
+("maybe", "consider", "might want to"), no exclamation points. See
+`docs/STYLE.md` before adding or rewriting any visible string.
+
 ## Before considering a task done
 
 - `pytest -q` passes.
