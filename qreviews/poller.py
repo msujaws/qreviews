@@ -5,20 +5,27 @@ Designed so `process_revision()` is reusable by the webhook receiver later.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from anthropic import Anthropic
 
 from qreviews.conduit import ConduitClient, Revision
 from qreviews.config import Config, ReviewerGroup, Secrets
-from qreviews.poster import post_comment, render_comment
+from qreviews.diff_analysis import analyze_diff, format_test_signal_block
+from qreviews.poster import post_review, render_comment
 from qreviews.review import generate_review
 from qreviews.scoring import score_revision
 from qreviews.skills import discover_skill_dirs
 from qreviews.state import Store
+from qreviews.test_coverage import (
+    ExistingCoverage,
+    format_coverage_block,
+    lookup_existing_coverage,
+)
 
 log = logging.getLogger(__name__)
 
@@ -335,6 +342,29 @@ class Poller:
                 revision_id=revision.id, posted=False, skipped_reason="oversized_diff"
             )
 
+        # Pre-computed test signals (in-diff classification + existing
+        # coverage via searchfox). Surfaced to both scoring and review.
+        diff_stats = analyze_diff(raw_diff)
+        try:
+            coverage = lookup_existing_coverage(diff_stats.non_test_paths)
+        except Exception:
+            log.exception(
+                "coverage lookup raised for %s; continuing without it",
+                revision.display_id,
+            )
+            coverage = ExistingCoverage()
+        coverage_block = format_coverage_block(coverage)
+        test_signals_block = format_test_signal_block(
+            diff_stats, coverage_block=coverage_block
+        )
+        log.info(
+            "%s signals: in_diff=%s coverage=%s (%d non-test files)",
+            revision.display_id,
+            diff_stats.in_diff_test_signal,
+            coverage.coverage_signal,
+            diff_stats.non_test_files_changed,
+        )
+
         # Score
         try:
             scoring = score_revision(
@@ -347,6 +377,7 @@ class Poller:
                 author_phid=revision.author_phid,
                 bug_id=revision.bug_id,
                 raw_diff=raw_diff,
+                test_signals_block=test_signals_block,
             )
         except Exception as e:
             log.exception("scoring failed for %s: %s", revision.display_id, e)
@@ -368,6 +399,17 @@ class Poller:
             complexity_factors=scoring.scores.complexity_factors,
             model=scoring.model,
             usage=scoring.usage,
+            test_files_changed=diff_stats.test_files_changed,
+            non_test_files_changed=diff_stats.non_test_files_changed,
+            in_diff_test_signal=diff_stats.in_diff_test_signal,
+            coverage_signal=coverage.coverage_signal,
+            coverage_lookup_json=json.dumps(
+                {
+                    "covered_paths": coverage.covered_paths,
+                    "uncovered_paths": coverage.uncovered_paths,
+                    "candidate_count": coverage.candidate_count,
+                }
+            ),
         )
 
         risk_threshold = group.effective_risk_threshold(self.config.defaults)
@@ -452,6 +494,8 @@ class Poller:
                 bug_id=revision.bug_id,
                 raw_diff=raw_diff,
                 additional_skill_paths=additional_skill_paths,
+                test_signals_block=test_signals_block,
+                legal_anchors=diff_stats.legal_anchors,
             )
         except Exception as e:
             log.exception("review generation failed for %s: %s", revision.display_id, e)
@@ -471,13 +515,19 @@ class Poller:
         rendered = render_comment(
             revision_phid=revision.phid,
             scores=scoring.scores,
-            review_body=review.body,
+            review_body=review.summary,
             review_model=review.model,
             threshold=max(risk_threshold, complexity_threshold),
+            findings=review.findings,
             dashboard_url=self.config.dashboard.public_url,
         )
 
-        posted = post_comment(self.conduit, rendered=rendered, dry_run=dry_run)
+        inlines_posted = post_review(
+            self.conduit, rendered=rendered, diff_id=diff.id, dry_run=dry_run
+        )
+        posted = (not dry_run)
+
+        findings_json = json.dumps([asdict(f) for f in review.findings])
 
         self.store.record_reviewed(
             revision_phid=revision.phid,
@@ -488,6 +538,8 @@ class Poller:
             posted=posted,
             skipped_reason=None if posted else "dry_run",
             tool_calls=review.tool_calls,
+            inline_count=inlines_posted,
+            findings_json=findings_json,
         )
 
         return ProcessResult(

@@ -59,6 +59,8 @@ def mocked_poller(config, store, tmp_path):
     conduit.search_revisions.return_value = [_rev()]
     conduit.search_revisions_by_phids.return_value = []
     conduit.post_comment.return_value = {"object": {"id": 100}}
+    conduit.publish_review.return_value = {"object": {"id": 100}}
+    conduit.create_inline.return_value = "PHID-XCMT-1"
     # Default: no human commenters — set explicitly so MagicMock's truthy
     # default doesn't accidentally trip the "already_commented" skip.
     conduit.human_commenter_phids.return_value = set()
@@ -86,9 +88,9 @@ def test_process_revision_below_threshold_posts(mocked_poller):
     assert result.posted is True
     assert result.risk == 1
     assert result.complexity == 1
-    conduit.post_comment.assert_called_once()
+    conduit.publish_review.assert_called_once()
     # The posted body should include the score scaffold + the Claude review body.
-    body = conduit.post_comment.call_args[0][1]
+    body = conduit.publish_review.call_args.args[1]
     assert "Risk: **1/10**" in body
     assert "No findings" in body
 
@@ -103,7 +105,8 @@ def test_process_revision_above_threshold_skips(mocked_poller):
     result = poller.process_revision(_rev(), group)
     assert result.posted is False
     assert result.skipped_reason == "above_threshold"
-    conduit.post_comment.assert_not_called()
+    conduit.publish_review.assert_not_called()
+    conduit.create_inline.assert_not_called()
 
 
 def test_dedup_short_circuits(mocked_poller):
@@ -129,7 +132,8 @@ def test_dry_run_does_not_post(mocked_poller):
     group = poller.config.enabled_groups()[0]
     result = poller.process_revision(_rev(), group, dry_run=True)
     assert result.posted is False
-    conduit.post_comment.assert_not_called()
+    conduit.publish_review.assert_not_called()
+    conduit.create_inline.assert_not_called()
 
 
 def test_oversized_diff_skipped(mocked_poller):
@@ -165,7 +169,8 @@ def test_already_accepted_revision_is_skipped(mocked_poller):
     conduit.latest_diff.assert_not_called()
     conduit.get_raw_diff.assert_not_called()
     anthropic.messages.create.assert_not_called()
-    conduit.post_comment.assert_not_called()
+    conduit.publish_review.assert_not_called()
+    conduit.create_inline.assert_not_called()
 
 
 def test_revision_with_human_comment_is_skipped(mocked_poller):
@@ -179,7 +184,8 @@ def test_revision_with_human_comment_is_skipped(mocked_poller):
     # this skip), but raw_diff fetch and scoring must not happen.
     conduit.get_raw_diff.assert_not_called()
     anthropic.messages.create.assert_not_called()
-    conduit.post_comment.assert_not_called()
+    conduit.publish_review.assert_not_called()
+    conduit.create_inline.assert_not_called()
 
 
 def test_revision_already_reviewed_by_qreviews_is_skipped(mocked_poller):
@@ -215,7 +221,8 @@ def test_revision_already_reviewed_by_qreviews_is_skipped(mocked_poller):
     conduit.human_commenter_phids.assert_not_called()
     conduit.get_raw_diff.assert_not_called()
     anthropic.messages.create.assert_not_called()
-    conduit.post_comment.assert_not_called()
+    conduit.publish_review.assert_not_called()
+    conduit.create_inline.assert_not_called()
 
 
 def test_revision_authored_by_non_member_is_skipped(mocked_poller):
@@ -230,7 +237,8 @@ def test_revision_authored_by_non_member_is_skipped(mocked_poller):
     conduit.human_commenter_phids.assert_not_called()
     conduit.get_raw_diff.assert_not_called()
     anthropic.messages.create.assert_not_called()
-    conduit.post_comment.assert_not_called()
+    conduit.publish_review.assert_not_called()
+    conduit.create_inline.assert_not_called()
 
 
 def _project_lookup(group_phid: str = "PHID-PROJ-ip", secure_phid: str = "PHID-PROJ-secure"):
@@ -261,7 +269,8 @@ def test_secure_revision_tagged_is_skipped(mocked_poller):
     conduit.get_raw_diff.assert_not_called()
     conduit.human_commenter_phids.assert_not_called()
     anthropic.messages.create.assert_not_called()
-    conduit.post_comment.assert_not_called()
+    conduit.publish_review.assert_not_called()
+    conduit.create_inline.assert_not_called()
 
 
 def test_empty_members_lookup_does_not_skip(mocked_poller):
@@ -311,7 +320,8 @@ def test_draft_revision_is_skipped(mocked_poller):
     conduit.get_raw_diff.assert_not_called()
     conduit.human_commenter_phids.assert_not_called()
     anthropic.messages.create.assert_not_called()
-    conduit.post_comment.assert_not_called()
+    conduit.publish_review.assert_not_called()
+    conduit.create_inline.assert_not_called()
 
 
 def test_changes_planned_revision_is_skipped(mocked_poller):
@@ -328,7 +338,8 @@ def test_changes_planned_revision_is_skipped(mocked_poller):
     conduit.get_raw_diff.assert_not_called()
     conduit.human_commenter_phids.assert_not_called()
     anthropic.messages.create.assert_not_called()
-    conduit.post_comment.assert_not_called()
+    conduit.publish_review.assert_not_called()
+    conduit.create_inline.assert_not_called()
 
 
 def test_secure_revision_phid_is_cached_across_calls(mocked_poller):
