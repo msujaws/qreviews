@@ -295,6 +295,53 @@ def test_post_comment_sends_transaction(fake_session):
     assert ("transactions[0][value]", "hello") in data
 
 
+def test_create_inline_sends_correct_params(fake_session):
+    fake_session.post.return_value = _ok_response({"phid": "PHID-XCMT-77"})
+    c = _make_client(fake_session)
+    phid = c.create_inline(
+        diff_id=42,
+        file_path="dom/foo/Bar.cpp",
+        line=117,
+        is_new_file=True,
+        content="Fix the unused param.",
+    )
+    assert phid == "PHID-XCMT-77"
+    args, kwargs = fake_session.post.call_args
+    assert args[0] == "https://phab.example.test/api/differential.createinline"
+    data = kwargs["data"]
+    assert ("diffID", "42") in data
+    assert ("filePath", "dom/foo/Bar.cpp") in data
+    assert ("lineNumber", "117") in data
+    assert ("lineLength", "1") in data
+    assert ("isNewFile", "true") in data
+    assert ("content", "Fix the unused param.") in data
+
+
+def test_create_inline_returns_none_when_no_phid(fake_session):
+    fake_session.post.return_value = _ok_response({})
+    c = _make_client(fake_session)
+    phid = c.create_inline(
+        diff_id=1,
+        file_path="a.cpp",
+        line=1,
+        is_new_file=True,
+        content="x",
+    )
+    assert phid is None
+
+
+def test_publish_review_posts_comment_transaction(fake_session):
+    fake_session.post.return_value = _ok_response({"object": {"id": 555}})
+    c = _make_client(fake_session)
+    c.publish_review("PHID-DREV-1", "summary body")
+    args, kwargs = fake_session.post.call_args
+    assert args[0] == "https://phab.example.test/api/differential.revision.edit"
+    data = kwargs["data"]
+    assert ("objectIdentifier", "PHID-DREV-1") in data
+    assert ("transactions[0][type]", "comment") in data
+    assert ("transactions[0][value]", "summary body") in data
+
+
 def test_retry_after_on_429(fake_session, monkeypatch):
     """429 with Retry-After should be respected; subsequent 200 succeeds."""
     rate_limited = MagicMock()

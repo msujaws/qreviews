@@ -371,10 +371,58 @@ class ConduitClient:
     # ------------------------------------------------------------ comments
 
     def post_comment(self, revision_phid: str, body: str) -> dict[str, Any]:
-        """Post a single non-blocking `comment` transaction to a revision."""
+        """Post a single non-blocking `comment` transaction to a revision.
+
+        Kept as a thin shim for callers that only need a summary comment;
+        the inline-finding flow goes through `create_inline` + `publish_review`.
+        """
+        return self.publish_review(revision_phid, body)
+
+    def create_inline(
+        self,
+        *,
+        diff_id: int,
+        file_path: str,
+        line: int,
+        is_new_file: bool,
+        content: str,
+        length: int = 1,
+    ) -> str | None:
+        """Create a DRAFT inline comment via `differential.createinline`.
+
+        The draft is bound to the bot's API-token user and remains
+        unpublished until the next `differential.revision.edit` `comment`
+        transaction by the same user, which is what `publish_review` does.
+
+        Returns the inline's PHID on success, or `None` if Conduit didn't
+        include one (e.g. older Phabricator). Raises on Conduit-level error.
+        """
+        params = {
+            "diffID": int(diff_id),
+            "filePath": file_path,
+            "isNewFile": bool(is_new_file),
+            "lineNumber": int(line),
+            "lineLength": max(1, int(length)),
+            "content": content,
+        }
+        result = self.call("differential.createinline", params)
+        if isinstance(result, dict):
+            phid = result.get("phid") or result.get("inlinePHID")
+            if isinstance(phid, str):
+                return phid
+        return None
+
+    def publish_review(self, revision_phid: str, summary_body: str) -> dict[str, Any]:
+        """Publish a top-level comment and flush any pending inline drafts.
+
+        Phabricator publishes the bot user's pending inline drafts on the
+        revision atomically with the `comment` transaction issued here, so
+        `create_inline` calls earlier in this process are flushed together
+        with the summary comment.
+        """
         params = {
             "objectIdentifier": revision_phid,
-            "transactions": [{"type": "comment", "value": body}],
+            "transactions": [{"type": "comment", "value": summary_body}],
         }
         return self.call("differential.revision.edit", params)
 
