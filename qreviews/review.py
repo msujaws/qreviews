@@ -84,7 +84,9 @@ items rather than padding the review.
 state the problem, then suggest the fix. Use directive verbs: "Fix",
 "Remove", "Change", "Add". NEVER use these hedging phrases: "maybe",
 "might want to", "consider", "possibly", "could be", "you may want
-to". Each comment should be short and specific.
+to". Each comment should be short and specific. The full voice rules
+are codified in `docs/STYLE.md` and grounded in real Mozilla
+bugzilla prose; match the example findings below.
 
 ## What NOT to include
 
