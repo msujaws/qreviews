@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Header } from "./components/Header";
 import { KpiRow } from "./components/KpiRow";
 import { ThroughputChart } from "./components/ThroughputChart";
@@ -9,13 +8,14 @@ import { Eyebrow } from "./components/Eyebrow";
 import { WhyAndHow } from "./components/WhyAndHow";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { useGroupParam } from "./hooks/useGroupParam";
+import { useRevisionParam } from "./hooks/useRevisionParam";
 
 const DEFAULT_RISK = 3;
 const DEFAULT_COMPLEXITY = 3;
 
 export function App() {
   const [group, setGroup] = useGroupParam();
-  const [openRevision, setOpenRevision] = useState<number | null>(null);
+  const [openRevision, setOpenRevision] = useRevisionParam();
 
   const { groups, summary, histograms, timeseries, revisions } = useDashboardData(group);
 
