@@ -1,8 +1,11 @@
-"""Comment rendering."""
+"""Comment rendering + inline-posting orchestration."""
 
 from __future__ import annotations
 
-from qreviews.poster import SOURCE_URL, render_comment
+from unittest.mock import MagicMock
+
+from qreviews.poster import SOURCE_URL, post_review, render_comment
+from qreviews.review import Finding
 from qreviews.scoring import Scores
 
 
@@ -13,6 +16,10 @@ def _scores() -> Scores:
         risk_factors=["touches only browser/components/newtab/styles.css"],
         complexity_factors=["3 LOC added, no logic change"],
     )
+
+
+def _finding(path: str = "browser/components/newtab/Foo.jsx", line: int = 10) -> Finding:
+    return Finding(file_path=path, line=line, is_new_file=True, body="Fix the thing.")
 
 
 def test_render_includes_scores_and_factors():
@@ -28,7 +35,7 @@ def test_render_includes_scores_and_factors():
     assert "browser/components/newtab/styles.css" in out.body
     assert "3 LOC added" in out.body
     assert "No findings." in out.body
-    # New footer: names the service and links to the source on GitHub.
+    # Footer references the service and links to the source on GitHub.
     assert "qreviews" in out.body
     assert SOURCE_URL in out.body
     assert "advisory only" in out.body.lower()
@@ -60,3 +67,107 @@ def test_render_omits_dashboard_sentence_when_url_unset():
     assert "Live metrics" not in out.body
     assert "<>" not in out.body
     assert "None" not in out.body
+
+
+def test_render_headline_reflects_findings_count():
+    no_findings = render_comment(
+        revision_phid="PHID-DREV-1",
+        scores=_scores(),
+        review_body="",
+        review_model="m",
+        threshold=2,
+    )
+    assert "no inline findings" in no_findings.body.lower()
+
+    one = render_comment(
+        revision_phid="PHID-DREV-1",
+        scores=_scores(),
+        review_body="",
+        review_model="m",
+        threshold=2,
+        findings=[_finding()],
+    )
+    assert "1 inline finding" in one.body
+
+    two = render_comment(
+        revision_phid="PHID-DREV-1",
+        scores=_scores(),
+        review_body="",
+        review_model="m",
+        threshold=2,
+        findings=[_finding(), _finding(line=20)],
+    )
+    assert "2 inline findings" in two.body
+
+
+def test_render_attaches_findings_for_posting():
+    out = render_comment(
+        revision_phid="PHID-DREV-1",
+        scores=_scores(),
+        review_body="",
+        review_model="m",
+        threshold=2,
+        findings=[_finding()],
+    )
+    assert len(out.findings) == 1
+
+
+def test_post_review_creates_inlines_then_publishes():
+    client = MagicMock()
+    rendered = render_comment(
+        revision_phid="PHID-DREV-1",
+        scores=_scores(),
+        review_body="",
+        review_model="m",
+        threshold=2,
+        findings=[_finding(), _finding(path="b.cpp", line=42)],
+    )
+    posted = post_review(client, rendered=rendered, diff_id=99)
+    assert posted == 2
+    # Two inlines created with the right anchors.
+    assert client.create_inline.call_count == 2
+    first_call = client.create_inline.call_args_list[0]
+    assert first_call.kwargs["diff_id"] == 99
+    assert first_call.kwargs["file_path"] == "browser/components/newtab/Foo.jsx"
+    assert first_call.kwargs["line"] == 10
+    assert first_call.kwargs["is_new_file"] is True
+    # Summary published last.
+    client.publish_review.assert_called_once()
+    _, kwargs = client.publish_review.call_args
+    # publish_review is called positionally — verify args order.
+    pos_args = client.publish_review.call_args.args
+    assert pos_args[0] == "PHID-DREV-1"
+    assert "qreviews" in pos_args[1]
+
+
+def test_post_review_dry_run_emits_no_calls():
+    client = MagicMock()
+    rendered = render_comment(
+        revision_phid="PHID-DREV-1",
+        scores=_scores(),
+        review_body="",
+        review_model="m",
+        threshold=2,
+        findings=[_finding()],
+    )
+    posted = post_review(client, rendered=rendered, diff_id=99, dry_run=True)
+    assert posted == 0
+    client.create_inline.assert_not_called()
+    client.publish_review.assert_not_called()
+
+
+def test_post_review_continues_past_inline_errors():
+    client = MagicMock()
+    client.create_inline.side_effect = [RuntimeError("conduit blew up"), "PHID-XCMT-ok"]
+    rendered = render_comment(
+        revision_phid="PHID-DREV-1",
+        scores=_scores(),
+        review_body="",
+        review_model="m",
+        threshold=2,
+        findings=[_finding(), _finding(path="b.cpp", line=42)],
+    )
+    posted = post_review(client, rendered=rendered, diff_id=1)
+    # First inline failed, second succeeded; summary still published.
+    assert posted == 1
+    client.publish_review.assert_called_once()
