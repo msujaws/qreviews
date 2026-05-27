@@ -17,19 +17,19 @@ function fmtPair(a: number | null | undefined, b: number | null | undefined): st
 }
 
 function fmtHours(n: number | null | undefined): { value: string; caption: string } {
-  if (n == null || n <= 0) return { value: "0h", caption: "no advisory comments posted yet" };
+  if (n == null || n <= 0) return { value: "0h", caption: "No advisory comments posted yet" };
   if (n < 1) {
     const minutes = Math.round(n * 60);
-    return { value: `${minutes}m`, caption: "of reviewer time pre-empted" };
+    return { value: `${minutes}m`, caption: "Reviewer time pre-empted" };
   }
   if (n < 10) {
-    return { value: `${n.toFixed(1)}h`, caption: "of reviewer time pre-empted" };
+    return { value: `${n.toFixed(1)}h`, caption: "Reviewer time pre-empted" };
   }
   if (n < 80) {
-    return { value: `${Math.round(n)}h`, caption: "of reviewer time pre-empted" };
+    return { value: `${Math.round(n)}h`, caption: "Reviewer time pre-empted" };
   }
   const days = (n / 8).toFixed(1);
-  return { value: `${days}d`, caption: "of reviewer time pre-empted (8h/day)" };
+  return { value: `${days}d`, caption: "Reviewer time pre-empted (8h/day)" };
 }
 
 interface CellProps {
@@ -62,22 +62,22 @@ export function KpiRow({ summary }: Props) {
   return (
     <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-px bg-[var(--pt-hairline)] border border-[var(--pt-hairline)]">
       <Cell
-        label="revisions seen"
+        label="Revisions seen"
         value={fmt(summary?.revisions_seen)}
-        caption="total observed by the bot"
+        caption="Total observed by the bot"
       />
       <Cell
-        label="auto · reviewed"
+        label="Auto-reviewed"
         value={fmt(summary?.revisions_posted)}
         caption={`${summary?.coverage_pct ?? 0}% coverage`}
       />
       <Cell
-        label="median risk · complex"
+        label="Median risk / complexity"
         value={fmtPair(summary?.median_risk, summary?.median_complexity)}
-        caption="across all scored revisions"
+        caption="Across all scored revisions"
       />
       <Cell
-        label="reviewer time saved"
+        label="Reviewer time saved"
         value={timeSaved.value}
         caption={timeSaved.caption}
         highlight

@@ -28,13 +28,13 @@ export function App() {
       <Header groups={groups.data} selected={group} onChange={setGroup} />
 
       <main className="mx-auto max-w-[1280px] px-8 py-12 flex flex-col gap-16">
-        <SectionWrap label="overview · summary">
+        <SectionWrap label="Overview">
           <KpiRow summary={summary.data} />
         </SectionWrap>
 
         <WhyAndHow />
 
-        <SectionWrap label="signal · over time">
+        <SectionWrap label="Signal over time">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <ThroughputChart data={timeseries.data} />
             <HistogramChart
@@ -45,7 +45,7 @@ export function App() {
           </div>
         </SectionWrap>
 
-        <SectionWrap label="ledger · recent activity">
+        <SectionWrap label="Recent activity">
           <RevisionsTable
             rows={revisions.data}
             riskThreshold={riskThreshold}
@@ -82,11 +82,11 @@ function Footer() {
   return (
     <footer className="mt-12 pt-8 border-t border-[var(--pt-hairline)] flex flex-col gap-3">
       <div className="pt-mono text-[11px] text-[var(--pt-muted)] tracking-[0.06em]">
-        unofficial · not an official mozilla product
+        Unofficial — not a Mozilla product
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-baseline sm:justify-between gap-y-3">
       <div className="pt-mono text-[11px] text-[var(--pt-muted)] tracking-[0.06em]">
-        polling · sqlite · wal · refreshes hourly
+        Polls Phabricator hourly. State in SQLite (WAL).
       </div>
       <div className="pt-mono text-[11px] text-[var(--pt-muted)] tracking-[0.06em]">
         created with <span style={{ color: "var(--pt-flame)" }}>♥</span> by Jared Wein
@@ -101,7 +101,7 @@ function Footer() {
           rel="noreferrer"
           className={linkCls}
         >
-          source ↗
+          Source
         </a>
       </div>
       <div className="pt-mono text-[10px] text-[var(--pt-muted)] uppercase tracking-[0.16em]">

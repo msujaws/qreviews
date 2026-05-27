@@ -24,7 +24,7 @@ export function Header({ groups, selected, onChange }: Props) {
             style={{ imageRendering: "auto" }}
           />
           <div>
-            <div className="pt-eyebrow mb-1">qreviews · v0.1</div>
+            <div className="pt-eyebrow mb-1">qreviews v0.1</div>
             <h1
               className="pt-numeral text-[clamp(36px,5vw,52px)] leading-none"
               style={{ letterSpacing: "-0.025em" }}
@@ -40,12 +40,12 @@ export function Header({ groups, selected, onChange }: Props) {
         </div>
         <div className="flex items-start gap-3">
           <div className="flex flex-col items-end gap-2">
-            <span className="pt-eyebrow">reviewer · group</span>
+            <span className="pt-eyebrow">Reviewer group</span>
             <Select
               data={options}
               value={selected}
               onChange={onChange}
-              placeholder="all groups"
+              placeholder="All groups"
               clearable
               allowDeselect
               w={240}
