@@ -39,6 +39,11 @@ def test_render_includes_scores_and_factors():
     assert "qreviews" in out.body
     assert SOURCE_URL in out.body
     assert "advisory only" in out.body.lower()
+    # Style-guide invariants: no emoji in the wrapper, and the factor
+    # sections use neutral Mozilla-bug-style labels.
+    assert "🤖" not in out.body
+    assert "Risk factors" in out.body
+    assert "Complexity factors" in out.body
 
 
 def test_render_includes_deep_link_when_url_and_revision_id_provided():

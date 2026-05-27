@@ -21,25 +21,25 @@ log = logging.getLogger(__name__)
 
 
 COMMENT_TEMPLATE = """\
-🤖 **qreviews — {headline}**
+**qreviews — {headline}**
 
-This revision was auto-reviewed because its automated **risk** and **complexity** scores were both below the configured threshold of {threshold}.
+Auto-reviewed because risk and complexity scored below the threshold of {threshold}.
 
 **Scores**
 - Risk: **{risk}/10**
 - Complexity: **{complexity}/10**
 
-**Why this looked low-risk**
+**Risk factors**
 {risk_bullets}
 
-**Why this looked low-complexity**
+**Complexity factors**
 {complexity_bullets}
 
 ---
 
 {findings_section}{review_body_section}
 ---
-*Posted by [qreviews]({source_url}) — an unofficial, non-blocking advisory review bot that uses Anthropic's Claude to score risk/complexity and draft low-risk reviews (review model: `{review_model}`). **Advisory only** — it does not accept, reject, or request changes.{dashboard_sentence} Reply with `/qreviews false-positive` to flag a bad call.*
+*Advisory only — posted by [qreviews]({source_url}) using `{review_model}`. Does not accept, reject, or request changes.{dashboard_sentence} Reply `/qreviews false-positive` to flag a bad call.*
 """
 
 SOURCE_URL = "https://github.com/msujaws/qreviews"
