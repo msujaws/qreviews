@@ -48,6 +48,21 @@ const STEPS: Array<{ label: string; body: string }> = [
   },
 ];
 
+const OPT_IN_AXES: Array<{ label: string; body: string }> = [
+  {
+    label: "Risk and complexity gate",
+    body: "qreviews scores every revision and only proceeds to review when both scores fall below the group's thresholds. Teams start conservative and raise the thresholds as the bot's judgment proves out.",
+  },
+  {
+    label: "Group-specific skills",
+    body: "Each enrolled group ships a SKILL.md rubric tailored to its domain, loaded into the review prompt for that group's patches.",
+  },
+  {
+    label: "Author-membership gate",
+    body: "qreviews scopes auto-review to patches whose author is a member of the reviewer group's Phabricator project. Groups broaden coverage explicitly when they're ready.",
+  },
+];
+
 const SOURCE_URL = "https://github.com/msujaws/qreviews";
 const ROADMAP_URL = `${SOURCE_URL}#long-term-vision`;
 const NEXT_STEPS_URL = `${SOURCE_URL}#next-steps`;
@@ -146,6 +161,38 @@ export function WhyAndHow() {
               </li>
             ))}
           </ol>
+
+          <div className="flex flex-col gap-5">
+            <div className="pt-eyebrow">Alongside the built-in AI review</div>
+            <p className="text-[15px] leading-[1.7] text-[var(--pt-ink)]">
+              Phabricator already ships an AI reviewer that runs on a
+              revision when its author requests it. qreviews is an
+              exploratory sibling working the same problem from a
+              different angle — it runs automatically on every
+              revision tagged for an enrolled reviewer group. Because
+              there is no per-patch human ask, it adds three opt-in
+              axes so teams can ramp up trust gradually.
+            </p>
+            <ul className="grid grid-cols-1 md:grid-cols-3 gap-px bg-[var(--pt-hairline)] border border-[var(--pt-hairline)]">
+              {OPT_IN_AXES.map((axis) => (
+                <li
+                  key={axis.label}
+                  className="flex flex-col gap-2 px-5 py-5 bg-[var(--pt-surface)]"
+                >
+                  <span className="pt-eyebrow">{axis.label}</span>
+                  <span className="text-[13.5px] leading-[1.6] text-[var(--pt-ink)]">
+                    {axis.body}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-[15px] leading-[1.7] text-[var(--pt-ink)]">
+              Each axis is per-group configuration. Teams adopt the
+              behaviors they want and leave the rest off. The patterns
+              that prove out here are intended to fold back upstream
+              into the built-in reviewer.
+            </p>
+          </div>
 
           <div className="pt-mono text-[12px] text-[var(--pt-muted)] leading-[1.7]">
             Throughput and score histograms across all observed revisions

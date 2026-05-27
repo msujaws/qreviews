@@ -90,6 +90,43 @@ flowchart LR
 
 ---
 
+## qreviews alongside Phabricator's built-in AI review
+
+Mozilla's Phabricator already ships an AI reviewer that runs on a
+revision when its author requests it. qreviews is an exploratory
+sibling working the same problem from a different angle: it runs
+automatically on every revision tagged for an enrolled reviewer
+group, with no per-patch ask. The two teams talk, and the patterns
+qreviews proves out are intended to fold back upstream into the
+built-in reviewer.
+
+Because qreviews runs without a per-patch human asking for it, it
+adds three opt-in axes that let teams ramp up trust gradually:
+
+- **Risk and complexity gate.** Every revision is first scored on
+  risk and complexity. qreviews only proceeds to review when both
+  scores fall below the group's configured `risk_threshold` and
+  `complexity_threshold` (defaults: both `< 3`). Teams start with
+  conservative thresholds and raise them as the bot's judgment
+  proves out — an "ease-in" path for auto-review.
+- **Reviewer-group-specific skills.** Each enrolled group ships a
+  `SKILL.md` rubric tailored to its domain, loaded into the review
+  prompt for that group's patches. The skill captures the
+  team's review priorities — what to flag, what to ignore, what
+  context to pull in via `searchfox-cli`.
+- **Author-membership gate.** By default qreviews scopes auto-review
+  to patches whose author is a member of the reviewer group's
+  Phabricator project (`restrict_to_member_authors: true`). Groups
+  stay in control of which patches reach the automated reviewer,
+  and broaden coverage explicitly when they're ready.
+
+Each axis is per-group configuration in `config.yaml`. Teams adopt
+the behaviors they want and leave the rest off. As thresholds,
+rubrics, and membership gates settle out, the patterns are intended
+to land upstream in the built-in reviewer.
+
+---
+
 ## Where it runs & what it can touch
 
 qreviews is hosted on **Railway** at
