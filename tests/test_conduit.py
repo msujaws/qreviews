@@ -284,15 +284,16 @@ def test_get_raw_diff(fake_session):
     assert "diff --git" in text
 
 
-def test_post_comment_sends_transaction(fake_session):
-    fake_session.post.return_value = _ok_response({"object": {"id": 555}, "transactions": []})
+def test_post_comment_calls_createcomment_with_attach_inlines(fake_session):
+    fake_session.post.return_value = _ok_response({"phid": "PHID-XACT-1"})
     c = _make_client(fake_session)
-    c.post_comment("PHID-DREV-1", "hello")
-    data = fake_session.post.call_args[1]["data"]
-    # PHP-bracket-encoded fields:
-    assert ("objectIdentifier", "PHID-DREV-1") in data
-    assert ("transactions[0][type]", "comment") in data
-    assert ("transactions[0][value]", "hello") in data
+    c.post_comment(302879, "hello")
+    args, kwargs = fake_session.post.call_args
+    assert args[0] == "https://phab.example.test/api/differential.createcomment"
+    data = kwargs["data"]
+    assert ("revision_id", "302879") in data
+    assert ("message", "hello") in data
+    assert ("attach_inlines", "true") in data
 
 
 def test_create_inline_sends_correct_params(fake_session):
@@ -330,16 +331,16 @@ def test_create_inline_returns_none_when_no_phid(fake_session):
     assert phid is None
 
 
-def test_publish_review_posts_comment_transaction(fake_session):
-    fake_session.post.return_value = _ok_response({"object": {"id": 555}})
+def test_publish_review_calls_createcomment_with_attach_inlines(fake_session):
+    fake_session.post.return_value = _ok_response({"phid": "PHID-XACT-1"})
     c = _make_client(fake_session)
-    c.publish_review("PHID-DREV-1", "summary body")
+    c.publish_review(302879, "summary body")
     args, kwargs = fake_session.post.call_args
-    assert args[0] == "https://phab.example.test/api/differential.revision.edit"
+    assert args[0] == "https://phab.example.test/api/differential.createcomment"
     data = kwargs["data"]
-    assert ("objectIdentifier", "PHID-DREV-1") in data
-    assert ("transactions[0][type]", "comment") in data
-    assert ("transactions[0][value]", "summary body") in data
+    assert ("revision_id", "302879") in data
+    assert ("message", "summary body") in data
+    assert ("attach_inlines", "true") in data
 
 
 def test_retry_after_on_429(fake_session, monkeypatch):

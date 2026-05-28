@@ -158,6 +158,7 @@ def test_post_review_creates_inlines_then_publishes():
         review_model="m",
         threshold=2,
         findings=[_finding(), _finding(path="b.cpp", line=42)],
+        revision_id=302879,
     )
     posted = post_review(client, rendered=rendered, diff_id=99)
     assert posted == 2
@@ -168,12 +169,11 @@ def test_post_review_creates_inlines_then_publishes():
     assert first_call.kwargs["file_path"] == "browser/components/newtab/Foo.jsx"
     assert first_call.kwargs["line"] == 10
     assert first_call.kwargs["is_new_file"] is True
-    # Summary published last.
+    # Summary published last via createcomment+attach_inlines, identified
+    # by the numeric revision id (not the PHID).
     client.publish_review.assert_called_once()
-    _, kwargs = client.publish_review.call_args
-    # publish_review is called positionally — verify args order.
     pos_args = client.publish_review.call_args.args
-    assert pos_args[0] == "PHID-DREV-1"
+    assert pos_args[0] == 302879
     assert "qreviews" in pos_args[1]
 
 
@@ -186,6 +186,7 @@ def test_post_review_dry_run_emits_no_calls():
         review_model="m",
         threshold=2,
         findings=[_finding()],
+        revision_id=302879,
     )
     posted = post_review(client, rendered=rendered, diff_id=99, dry_run=True)
     assert posted == 0
@@ -203,8 +204,27 @@ def test_post_review_continues_past_inline_errors():
         review_model="m",
         threshold=2,
         findings=[_finding(), _finding(path="b.cpp", line=42)],
+        revision_id=302879,
     )
     posted = post_review(client, rendered=rendered, diff_id=1)
     # First inline failed, second succeeded; summary still published.
     assert posted == 1
     client.publish_review.assert_called_once()
+
+
+def test_post_review_skips_publish_when_revision_id_missing():
+    client = MagicMock()
+    rendered = render_comment(
+        revision_phid="PHID-DREV-1",
+        scores=_scores(),
+        review_body="",
+        review_model="m",
+        threshold=2,
+        findings=[_finding()],
+    )
+    posted = post_review(client, rendered=rendered, diff_id=99)
+    # Without a revision_id we can't call differential.createcomment;
+    # surface the failure rather than silently skipping inlines.
+    assert posted == 0
+    client.create_inline.assert_not_called()
+    client.publish_review.assert_not_called()

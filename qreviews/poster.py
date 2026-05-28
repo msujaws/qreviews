@@ -50,6 +50,7 @@ class RenderedComment:
     revision_phid: str
     body: str
     findings: list[Finding] = field(default_factory=list)
+    revision_id: int | None = None
 
 
 def _bulletize(items: list[str]) -> str:
@@ -110,7 +111,12 @@ def render_comment(
         source_url=SOURCE_URL,
         dashboard_sentence=dashboard_sentence,
     )
-    return RenderedComment(revision_phid=revision_phid, body=body, findings=findings)
+    return RenderedComment(
+        revision_phid=revision_phid,
+        body=body,
+        findings=findings,
+        revision_id=revision_id,
+    )
 
 
 def post_review(
@@ -127,6 +133,14 @@ def post_review(
         log.info(
             "dry-run: would post %d inline finding(s) + summary to %s",
             len(rendered.findings),
+            rendered.revision_phid,
+        )
+        return 0
+
+    if rendered.revision_id is None:
+        log.error(
+            "post_review: rendered comment for %s has no revision_id; "
+            "cannot publish via differential.createcomment",
             rendered.revision_phid,
         )
         return 0
@@ -151,7 +165,7 @@ def post_review(
             )
             # Keep going — one bad inline shouldn't drop the rest.
 
-    client.publish_review(rendered.revision_phid, rendered.body)
+    client.publish_review(rendered.revision_id, rendered.body)
     log.info(
         "posted review to %s: %d inline finding(s), %d char summary",
         rendered.revision_phid,
@@ -180,6 +194,13 @@ def post_comment(
             len(rendered.body),
         )
         return False
-    client.publish_review(rendered.revision_phid, rendered.body)
+    if rendered.revision_id is None:
+        log.error(
+            "post_comment: rendered comment for %s has no revision_id; "
+            "cannot publish via differential.createcomment",
+            rendered.revision_phid,
+        )
+        return False
+    client.publish_review(rendered.revision_id, rendered.body)
     log.info("posted summary-only comment to %s", rendered.revision_phid)
     return True

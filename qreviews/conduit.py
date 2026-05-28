@@ -370,13 +370,16 @@ class ConduitClient:
 
     # ------------------------------------------------------------ comments
 
-    def post_comment(self, revision_phid: str, body: str) -> dict[str, Any]:
-        """Post a single non-blocking `comment` transaction to a revision.
+    def post_comment(self, revision_id: int, body: str) -> dict[str, Any]:
+        """Post a summary comment to a revision (no inline drafts attached).
 
-        Kept as a thin shim for callers that only need a summary comment;
-        the inline-finding flow goes through `create_inline` + `publish_review`.
+        Thin shim around `publish_review` for callers that only need a
+        top-level comment. The inline-finding flow goes through
+        `create_inline` + `publish_review`; both end up in the same
+        `differential.createcomment` call so any pending drafts the bot
+        has accumulated will be flushed either way.
         """
-        return self.publish_review(revision_phid, body)
+        return self.publish_review(revision_id, body)
 
     def create_inline(
         self,
@@ -391,8 +394,9 @@ class ConduitClient:
         """Create a DRAFT inline comment via `differential.createinline`.
 
         The draft is bound to the bot's API-token user and remains
-        unpublished until the next `differential.revision.edit` `comment`
-        transaction by the same user, which is what `publish_review` does.
+        unpublished until a subsequent `differential.createcomment` call
+        with `attach_inlines=1` by the same user, which is what
+        `publish_review` does.
 
         Returns the inline's PHID on success, or `None` if Conduit didn't
         include one (e.g. older Phabricator). Raises on Conduit-level error.
@@ -412,19 +416,29 @@ class ConduitClient:
                 return phid
         return None
 
-    def publish_review(self, revision_phid: str, summary_body: str) -> dict[str, Any]:
-        """Publish a top-level comment and flush any pending inline drafts.
+    def publish_review(self, revision_id: int, summary_body: str) -> dict[str, Any]:
+        """Publish the summary comment and flush pending inline drafts.
 
-        Phabricator publishes the bot user's pending inline drafts on the
-        revision atomically with the `comment` transaction issued here, so
-        `create_inline` calls earlier in this process are flushed together
-        with the summary comment.
+        Calls `differential.createcomment` with `attach_inlines=1`, which
+        publishes every inline draft the bot user has created on this
+        revision (via prior `create_inline` calls) atomically alongside
+        the summary `message`. `differential.revision.edit` with a
+        `comment` transaction does NOT auto-publish drafts over the
+        Conduit path — drafts stay invisible until a separate
+        `createcomment` call attaches them. mozilla/bugbug's
+        `services/reviewhelper-api/app/review_processor.py` uses the
+        same pattern.
+
+        `differential.createcomment` is documented as deprecated, but
+        Mozilla's Phabricator still serves it and it is the only
+        Conduit method that publishes pending inline drafts.
         """
         params = {
-            "objectIdentifier": revision_phid,
-            "transactions": [{"type": "comment", "value": summary_body}],
+            "revision_id": int(revision_id),
+            "message": summary_body,
+            "attach_inlines": True,
         }
-        return self.call("differential.revision.edit", params)
+        return self.call("differential.createcomment", params)
 
     # ------------------------------------------------------------ misc
 
