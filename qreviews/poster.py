@@ -39,7 +39,7 @@ Auto-reviewed because risk and complexity scored below the threshold of {thresho
 
 {findings_section}{review_body_section}
 ---
-*Advisory only — posted by [qreviews]({source_url}) using `{review_model}`. Does not accept, reject, or request changes.{dashboard_sentence} Reply `/qreviews false-positive` to flag a bad call.*
+*Advisory only — posted by [qreviews]({source_url}) using `{review_model}`. Does not accept, reject, or request changes.{dashboard_sentence}*
 """
 
 SOURCE_URL = "https://github.com/msujaws/qreviews"
