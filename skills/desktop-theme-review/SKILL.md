@@ -9,6 +9,9 @@ description: Durable conventions for reviewing CSS, SVG, and front-end theme pat
 2. Do not use base/primitive tokens (`--color-gray-50`, `--color-violet-70`, etc.) directly in component CSS. Define a semantic local variable that aliases the base token, or use the appropriate semantic token (`--text-color`, `--background-color-box`, `--border-color`). The stylelint `use-design-tokens` rule enforces this.
 3. Edit token values in the JSON sources under `toolkit/themes/shared/design-system/src/tokens/` and run `./mach buildtokens`; never hand-edit the generated `dist/tokens-*.css` files.
 4. New module-wide custom properties belong in the relevant tokens JSON or a component-scoped `.css` file, not scattered across consumer stylesheets. If a value is used once, inline it instead of inventing a variable.
+5. Verify every `var(--name)` reference resolves. When a CSS variable is referenced but never defined — typo, dropped during a rename, or stale fallback to a deleted predecessor — the declaration silently evaluates to invalid and the property is dropped. Watch especially for renames, word-order typos (`--toolbarbutton-padding-inner` vs `--toolbarbutton-inner-padding`), and uplifts that bring a CSS change to a branch where the supporting var wasn't introduced. A fallback (var(--x, <value>)) is acceptable; only flag bare var(--x) whose name appears nowhere. Use searchfox-cli --path '**/*.{css,scss}' '<name>\s*:' to confirm a definition exists; use searchfox-cli --path '**/*.{mjs,js}' 'setProperty\(.<name>' to confirm it isn't set at runtime by JS (e.g. --avatar-url, --lwt-*, --tab-group-color, --rdm-* — these are runtime-set and not regressions).
+
+
 
 ### Localization & RTL
 5. Use logical properties (`margin-inline-*`, `padding-inline-*`, `inset-inline-*`, `border-inline-*`, `border-start-start-radius`, etc.) rather than `left`/`right`. For background/transform-based assets that need mirroring, use `:dir(rtl)` (or `:-moz-locale-dir(rtl)` in XUL) to override or supply a mirrored asset. Test RTL via `intl.l10n.pseudo = bidi`.
@@ -95,6 +98,7 @@ description: Durable conventions for reviewing CSS, SVG, and front-end theme pat
 - [ ] If touching reusable components, are Storybook stories, tests, and `customElements.js` registration updated?
 - [ ] **(campaign)** If adding/altering a setting, is it expressed via `Preferences.addSetting` + setting-group config, not new XUL?
 - [ ] **(campaign)** Nova-specific overrides scoped behind `@media -moz-pref("browser.nova.enabled")` (or equivalent) rather than mutating base tokens?
+- [ ] Every `var(--name)` introduced, modified, or included by the patch resolves to a defined design token, a CSS `--name:` declaration, a JS `setProperty("--name", ...)`, or has an inline fallback. Inside `calc()`, check each `var()` operand independently — the lint rule may not.
 
 ## House style references
 
