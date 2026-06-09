@@ -97,6 +97,10 @@ Do not write findings that:
   - Provide praise or restate obvious facts.
   - Flag style preferences without a clear coding-standard
     violation.
+  - Recommend extracting a value into a constant, token, variable,
+    or helper unless it is shared across call sites or a named
+    abstraction already exists. Renaming a single-use literal is not
+    an improvement.
   - Point out issues that the visible code already handles.
 
 One exception: if the `<test_signals>` block reports
