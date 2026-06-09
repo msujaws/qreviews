@@ -404,7 +404,11 @@ class ConduitClient:
         params = {
             "diffID": int(diff_id),
             "filePath": file_path,
-            "isNewFile": bool(is_new_file),
+            # Phabricator writes isNewFile into an integer column and does no
+            # coercion on form-encoded scalars; the strings "true"/"false"
+            # both become 0 (the base side). Send 1/0 so the new-side flag
+            # survives.
+            "isNewFile": 1 if is_new_file else 0,
             "lineNumber": int(line),
             "lineLength": max(1, int(length)),
             "content": content,

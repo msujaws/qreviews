@@ -314,7 +314,7 @@ def test_create_inline_sends_correct_params(fake_session):
     assert ("filePath", "dom/foo/Bar.cpp") in data
     assert ("lineNumber", "117") in data
     assert ("lineLength", "1") in data
-    assert ("isNewFile", "true") in data
+    assert ("isNewFile", "1") in data
     assert ("content", "Fix the unused param.") in data
 
 
