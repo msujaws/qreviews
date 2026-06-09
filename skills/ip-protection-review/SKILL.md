@@ -32,7 +32,7 @@ description: Durable review guidance for Firefox's built-in IP Protection (VPN) 
 - New user-facing strings belong in `browser/locales/en-US/browser/ipProtection.ftl` and must be wired into `browser.xhtml` outside the "Untranslated FTL" block.
 
 ## Panel UI, Theming & Accessibility
-- Use design-system tokens (`--space-*`, `--border-color-card`, `--icon-color`, `--font-weight-*`, `--dimension-*`) instead of raw pixel values or hardcoded colors; SVG assets that need theming must use `context-fill` / `context-stroke` and let CSS set the color.
+- Use an existing design-system token (`--space-*`, `--border-color-card`, `--icon-color`, `--font-weight-*`, `--dimension-*`) when one fits, instead of a raw pixel value or hardcoded color. Do not wrap a one-off literal in a single-use variable and call it a token — a value defined and referenced once in the same rule is a renamed magic number, not a design token. When no token fits, leave the literal or handle the requirement functionally (media query, `em`/`rem` sizing) rather than inventing a name. SVG assets that need theming must use `context-fill` / `context-stroke` and let CSS set the color.
 - Prefer logical properties (`padding-block-*`, `padding-inline-*`, `margin-block-*`) so layouts work in RTL. Any directional glyph (`arrow-right`, etc.) or hand-rolled class like `left`/`right` is a red flag.
 - Reuse existing shared icons under `toolkit/themes/shared/icons/` before adding new SVGs; optimize any new SVG (e.g. via SVGOMG) and place module illustrations under `browser/components/ipprotection/assets/` (not `browser/base/content/logos/`).
 - Prefer `moz-button` / `moz-card` and existing panel conventions (`subviewbutton-nav`, overflow attributes) over re-implementing styles; avoid overriding `--arrowpanel-*` variables when a local margin/padding change will do.
@@ -70,6 +70,7 @@ description: Durable review guidance for Firefox's built-in IP Protection (VPN) 
 - Landing a permanent promotional message in-tree without a `lifetime` frequency cap and without considering a Nimbus rollout for safe kill-switching.
 - Starting an abort controller / channel filter but not clearing it on every exit path (error, paused, stop-while-activating).
 - Creating new icon SVGs that duplicate existing ones in `toolkit/themes/shared/icons/`; placing state illustrations in `browser/base/content/logos/`.
+- Suggesting a raw pixel literal be hoisted into a single-use CSS variable as a "design token" — that renames a magic number without adding one. When no shared token exists, prefer functional sizing (`em`/`rem`, media queries), and don't abstract values that exist only for a temporary feature split (e.g. the pre-Nova/Nova width).
 - Forgetting the Fluent migration when renaming a user-facing string ID, or leaving the old ID around after all call sites are updated.
 - Running `mach lint` failures (fluent-lint, eslint, stylelint, file-whitespace) through to review; these should be clean before requesting review.
 - Editing `mots.yaml` without running `mots clean`.
@@ -94,7 +95,7 @@ description: Durable review guidance for Firefox's built-in IP Protection (VPN) 
 - [ ] No magic numbers for thresholds/caps/URLs — constants imported from the shared module.
 - [ ] New/changed Fluent IDs have a migration; units hardcoded; numbers passed as `$variables`.
 - [ ] New prefs documented in `docs/Preferences.rst` and use matching constants in code.
-- [ ] SVGs use `context-fill`/`context-stroke`; tokens (not pixel literals) drive spacing and color; logical properties used.
+- [ ] SVGs use `context-fill`/`context-stroke`; an existing shared token (not a pixel literal) drives spacing and color where one fits; one-off literals aren't wrapped in single-use variables; logical properties used.
 - [ ] Accessibility verified: accessible name, pressed/toggled state, keyboard focus, HCM outlines.
 - [ ] Lifecycle balanced: every start/addObserver/addEventListener/AbortController has a matching teardown on all paths.
 - [ ] Tests use `pushPrefEnv` and promise-based stubs; no `waitForCondition` unless truly necessary; testing-policy tag applied.
