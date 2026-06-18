@@ -292,7 +292,7 @@ reviewer_groups:
     # risk_threshold / complexity_threshold are optional; fall back to defaults
     # restrict_to_member_authors defaults to true
 
-  - slug: home-newtab-reviewers
+  - slug: home-newtab-reviewers-rotation
     enabled: true
     skill_path: skills/home-newtab-review/SKILL.md
 ```

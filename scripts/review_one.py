@@ -6,7 +6,7 @@ your editor or a quick shell command:
 
     ./scripts/review_one.py D302110             # dry run (no Phabricator write)
     ./scripts/review_one.py D302110 --post      # actually post the comment
-    ./scripts/review_one.py D302110 --group home-newtab-reviewers
+    ./scripts/review_one.py D302110 --group home-newtab-reviewers-rotation
 """
 
 from __future__ import annotations

@@ -19,7 +19,7 @@ def test_load_real_config():
     assert cfg.defaults.complexity_threshold == 3
     slugs = [g.slug for g in cfg.reviewer_groups]
     assert "ip-protection-reviewers" in slugs
-    assert "home-newtab-reviewers" in slugs
+    assert "home-newtab-reviewers-rotation" in slugs
 
 
 def test_threshold_fallback(config: Config):

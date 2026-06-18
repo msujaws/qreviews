@@ -48,6 +48,6 @@ reviewer_groups:
     # revisions whose author is a member of the Phabricator project for this
     # slug. Set to false to open the group up to external authors.
 
-  - slug: home-newtab-reviewers
+  - slug: home-newtab-reviewers-rotation
     enabled: true
     skill_path: skills/home-newtab-review/SKILL.md

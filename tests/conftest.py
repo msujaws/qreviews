@@ -53,6 +53,6 @@ def config(tmp_db: Path) -> Config:
                 enabled=True,
                 skill_path=None,  # tests stub skills
             ),
-            ReviewerGroup(slug="home-newtab-reviewers", enabled=False),
+            ReviewerGroup(slug="home-newtab-reviewers-rotation", enabled=False),
         ],
     )
