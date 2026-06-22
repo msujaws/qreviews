@@ -441,7 +441,10 @@ Logs land at `logs/qreviews.{out,err}`. The agent restarts on crash with a
 A single Railway service runs the poller daemon and the dashboard together,
 sharing one SQLite file on a persistent volume. `railway.json`,
 `nixpacks.toml`, and `scripts/railway_start.sh` are committed; Railway
-autodeploys on push to `main`. One-time setup:
+autodeploys on push to `main`. On every boot the start script runs
+`qreviews init-db` (creates tables) and `qreviews migrate` (applies the
+one-time reviewer-group slug rebinds in `SLUG_RENAMES`, so a group keeps its
+history across a config rename); both are idempotent. One-time setup:
 
 1. **Attach a Volume** to the service, mounted at `/data`.
 2. **Set environment variables** in the Railway dashboard:

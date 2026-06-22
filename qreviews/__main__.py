@@ -2,6 +2,7 @@
 
 Usage:
     python -m qreviews init-db
+    python -m qreviews migrate
     python -m qreviews resolve-phids
     python -m qreviews poll [--dry-run]
     python -m qreviews review <Dxxxxx> [--post]
@@ -51,6 +52,18 @@ def cmd_init_db(args: argparse.Namespace) -> int:
     store = Store(config.storage.db_path)
     store.init_schema()
     print(f"initialized {config.storage.db_path}")
+    return 0
+
+
+def cmd_migrate(args: argparse.Namespace) -> int:
+    from qreviews.state import SLUG_RENAMES
+
+    config = load_config(args.config)
+    store = Store(config.storage.db_path)
+    store.init_schema()
+    for old, new in SLUG_RENAMES:
+        moved = store.rename_group_slug(old, new)
+        print(f"  {old} → {new}: moved {moved} revision(s)")
     return 0
 
 
@@ -220,6 +233,9 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("init-db").set_defaults(func=cmd_init_db)
+    sub.add_parser(
+        "migrate", help="apply one-time reviewer-group slug rebinds (idempotent)"
+    ).set_defaults(func=cmd_migrate)
     sub.add_parser("resolve-phids").set_defaults(func=cmd_resolve_phids)
 
     poll = sub.add_parser("poll", help="run the polling loop")

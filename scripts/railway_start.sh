@@ -20,6 +20,11 @@ trap cleanup TERM INT
 # Idempotent: creates tables on a fresh volume, no-op afterwards.
 python -m qreviews init-db
 
+# Idempotent: rebinds renamed reviewer-group slugs so a group keeps its history
+# across a config rename (see SLUG_RENAMES in qreviews/state.py). No-op once the
+# old slugs no longer appear.
+python -m qreviews migrate
+
 python -m qreviews poll &
 POLL_PID=$!
 
