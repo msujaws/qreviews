@@ -16,6 +16,7 @@ rate limit.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from collections.abc import Iterable
@@ -61,11 +62,17 @@ def _flatten_params(params: dict[str, Any]) -> list[tuple[str, str]]:
     return out
 
 
+_TOKEN_RE = re.compile(r"api-[A-Za-z0-9]+")
+
+
 class ConduitError(RuntimeError):
     """Raised when Conduit returns a non-empty `error_code`."""
 
     def __init__(self, code: str, info: str, method: str):
-        super().__init__(f"Conduit {method} failed: {code} — {info}")
+        # Phabricator echoes the submitted token back in `error_info` for
+        # ERR-INVALID-AUTH, so redact any `api-…` token before it lands in logs.
+        safe_info = _TOKEN_RE.sub("api-‹redacted›", info)
+        super().__init__(f"Conduit {method} failed: {code} — {safe_info}")
         self.code = code
         self.info = info
         self.method = method

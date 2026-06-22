@@ -97,6 +97,19 @@ def test_call_raises_on_conduit_error(fake_session):
         c.call("project.search")
 
 
+def test_conduit_error_redacts_token():
+    """Phabricator echoes the token in error_info; it must not reach logs."""
+    err = ConduitError(
+        "ERR-INVALID-AUTH",
+        'API token "api-deadbeef1234567890abcdef" is not valid.',
+        "project.search",
+    )
+    assert "api-deadbeef1234567890abcdef" not in str(err)
+    assert "api-‹redacted›" in str(err)
+    # The raw info is still available for programmatic inspection.
+    assert "api-deadbeef1234567890abcdef" in err.info
+
+
 def test_resolve_project_phid(fake_session):
     fake_session.post.return_value = _ok_response(
         {"data": [{"phid": "PHID-PROJ-abc123"}]}
