@@ -246,6 +246,63 @@ def test_init_schema_is_idempotent(store: Store):
     store.init_schema()
 
 
+def test_rename_group_slug_merges_history(store: Store):
+    # Seed a revision under the old slug — record_seen writes to both
+    # `reviewed` and `events` — plus operational rows for the old slug.
+    store.record_seen(
+        revision_phid="PHID-DREV-1",
+        diff_phid="PHID-DIFF-1",
+        diff_id=1,
+        revision_id=100,
+        group_slug="home-newtab-reviewers",
+        title="t",
+        author_phid="PHID-USER-1",
+        revision_created_at=1000,
+    )
+    store.set_watermark("home-newtab-reviewers", 1716000000)
+    store.cache_phid("home-newtab-reviewers", "PHID-PROJ-old")
+
+    moved = store.rename_group_slug(
+        "home-newtab-reviewers", "home-newtab-reviewers-rotation"
+    )
+    assert moved == 1
+
+    conn = store.connect()
+
+    def count(table: str, slug: str) -> int:
+        col = "slug" if table == "project_phids" else "group_slug"
+        return conn.execute(
+            f"SELECT COUNT(*) FROM {table} WHERE {col}=?", (slug,)
+        ).fetchone()[0]
+
+    # History rebound onto the new slug.
+    assert count("reviewed", "home-newtab-reviewers-rotation") == 1
+    assert count("events", "home-newtab-reviewers-rotation") == 1
+    # Old slug is gone from every table, including the operational caches.
+    assert count("reviewed", "home-newtab-reviewers") == 0
+    assert count("events", "home-newtab-reviewers") == 0
+    assert count("poll_state", "home-newtab-reviewers") == 0
+    assert count("project_phids", "home-newtab-reviewers") == 0
+
+
+def test_rename_group_slug_is_idempotent(store: Store):
+    store.record_seen(
+        revision_phid="PHID-DREV-1",
+        diff_phid="PHID-DIFF-1",
+        diff_id=1,
+        revision_id=100,
+        group_slug="home-newtab-reviewers",
+        title="t",
+        author_phid="PHID-USER-1",
+        revision_created_at=1000,
+    )
+    assert store.rename_group_slug("home-newtab-reviewers", "new") == 1
+    # Second run finds no old-slug rows and moves nothing.
+    assert store.rename_group_slug("home-newtab-reviewers", "new") == 0
+    row = store.get_by_revision_id(100)
+    assert row["group_slug"] == "new"
+
+
 def test_event_log_grows(store: Store):
     store.record_seen(
         revision_phid="PHID-DREV-1",

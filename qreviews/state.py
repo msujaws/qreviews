@@ -98,6 +98,18 @@ CREATE TABLE IF NOT EXISTS project_phids (
 """
 
 
+# One-time reviewer-group slug rebinds, applied on every boot by `qreviews
+# migrate`. History and stats are keyed by a free-form group_slug string, so
+# renaming a group in config.yaml orphans its old rows; each (old, new) entry
+# here rebinds them. Idempotent: a no-op once the old slug no longer appears.
+#
+# 2026-06: Mozilla replaced the home-newtab-reviewers project with the
+# home-newtab-reviewers-rotation group.
+SLUG_RENAMES: list[tuple[str, str]] = [
+    ("home-newtab-reviewers", "home-newtab-reviewers-rotation"),
+]
+
+
 class Store:
     """Thin SQLite wrapper. One Store per process; thread-safe enough for
     single-writer / multi-reader (WAL)."""
@@ -466,6 +478,39 @@ class Store:
                 """,
                 (slug, phid, now),
             )
+
+    # ------------------------------------------------------------ migrations
+
+    def rename_group_slug(self, old: str, new: str) -> int:
+        """Rebind history rows from `old` to `new` and drop the old slug's
+        operational cache rows, so a renamed or replaced reviewer group keeps
+        its accumulated stats/history under the new slug.
+
+        `reviewed` and `events` carry the history the dashboard reads, so their
+        rows are moved. `poll_state` (the per-group watermark) and
+        `project_phids` (the resolved PHID cache) are operational state for the
+        defunct group, so the old rows are dropped — the new slug maintains its
+        own watermark and re-resolves its PHID. Dropping rather than renaming
+        also avoids colliding with any row the new slug already owns.
+
+        Idempotent: once `old` no longer appears, every statement is a no-op.
+        Returns the number of `reviewed` rows moved.
+        """
+        with self.txn() as conn:
+            # reviewed's PK is (revision_phid, diff_phid), so the rebind only
+            # collides in the unlikely case the same diff exists under both
+            # slugs; OR IGNORE keeps the new-slug copy, then we drop the rest.
+            moved = conn.execute(
+                "UPDATE OR IGNORE reviewed SET group_slug=? WHERE group_slug=?",
+                (new, old),
+            ).rowcount
+            conn.execute(
+                "UPDATE events SET group_slug=? WHERE group_slug=?", (new, old)
+            )
+            conn.execute("DELETE FROM reviewed WHERE group_slug=?", (old,))
+            conn.execute("DELETE FROM poll_state WHERE group_slug=?", (old,))
+            conn.execute("DELETE FROM project_phids WHERE slug=?", (old,))
+        return moved
 
     # ------------------------------------------------------------ queries (used by dashboard / metrics)
 
