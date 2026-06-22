@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import yaml
@@ -122,6 +123,16 @@ def load_config(config_path: str | Path = "config.yaml") -> Config:
     return Config.model_validate(raw)
 
 
+# The .env.example placeholders are a real prefix followed by only `x`s
+# (e.g. `api-xxxxxxxxxxxxxxxxxxxxxxxxxxxx`). A real token is random, so it never
+# matches these — but a deploy that copied .env.example without filling it in
+# would otherwise reach Conduit with invalid auth and spam Phabricator.
+_PLACEHOLDER_PATTERNS = {
+    "PHABRICATOR_API_TOKEN": re.compile(r"^api-x+$", re.IGNORECASE),
+    "ANTHROPIC_API_KEY": re.compile(r"^sk-ant-x+$", re.IGNORECASE),
+}
+
+
 def load_secrets(env_path: str | Path | None = ".env") -> Secrets:
     """Load secrets from .env (if present) + the process environment.
 
@@ -136,4 +147,12 @@ def load_secrets(env_path: str | Path | None = ".env") -> Secrets:
         raise RuntimeError("PHABRICATOR_API_TOKEN is not set (check .env or environment)")
     if not key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set (check .env or environment)")
+    if _PLACEHOLDER_PATTERNS["PHABRICATOR_API_TOKEN"].match(token):
+        raise RuntimeError(
+            "PHABRICATOR_API_TOKEN is the .env.example placeholder, not a real token"
+        )
+    if _PLACEHOLDER_PATTERNS["ANTHROPIC_API_KEY"].match(key):
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY is the .env.example placeholder, not a real key"
+        )
     return Secrets(phabricator_api_token=token, anthropic_api_key=key)

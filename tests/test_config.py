@@ -44,6 +44,28 @@ def test_secrets_loads_from_env(monkeypatch, tmp_path):
     assert s.anthropic_api_key == "sk-ant-test"
 
 
+def test_secrets_rejects_placeholder_token(monkeypatch, tmp_path):
+    monkeypatch.setenv("PHABRICATOR_API_TOKEN", "api-xxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    with pytest.raises(RuntimeError, match="placeholder"):
+        load_secrets(tmp_path / "nonexistent.env")
+
+
+def test_secrets_rejects_placeholder_anthropic_key(monkeypatch, tmp_path):
+    monkeypatch.setenv("PHABRICATOR_API_TOKEN", "api-realtoken123")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-xxxxxxxxxxxxxxxxxxxx")
+    with pytest.raises(RuntimeError, match="placeholder"):
+        load_secrets(tmp_path / "nonexistent.env")
+
+
+def test_secrets_accepts_realistic_token(monkeypatch, tmp_path):
+    """A real api- token contains non-x characters and must load fine."""
+    monkeypatch.setenv("PHABRICATOR_API_TOKEN", "api-abc123def456ghi789jkl012mno3")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-abc123def456")
+    s = load_secrets(tmp_path / "nonexistent.env")
+    assert s.phabricator_api_token == "api-abc123def456ghi789jkl012mno3"
+
+
 def test_enabled_groups(config: Config):
     enabled = config.enabled_groups()
     assert len(enabled) == 1
