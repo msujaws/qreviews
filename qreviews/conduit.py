@@ -177,7 +177,12 @@ class ConduitClient:
         self.max_retries = max_retries
         self.min_call_interval = min_call_interval
         self.session = session or requests.Session()
-        self.session.headers.update({"User-Agent": user_agent})
+        # Disable HTTP keep-alive: the poller makes only a handful of calls per
+        # cycle, then idles for an hour, during which the server drops the
+        # pooled connection. Reusing that dead socket stalls the next cycle's
+        # first call for the full read timeout before the retry recovers. With
+        # Connection: close there is no idle socket to go stale.
+        self.session.headers.update({"User-Agent": user_agent, "Connection": "close"})
         self._throttle_lock = threading.Lock()
         self._last_call_ts = 0.0
 

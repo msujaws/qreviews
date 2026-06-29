@@ -110,6 +110,28 @@ def test_conduit_error_redacts_token():
     assert "api-deadbeef1234567890abcdef" in err.info
 
 
+def test_session_disables_keep_alive():
+    """The poller idles for an hour between bursts; a pooled keep-alive socket
+    goes stale and stalls the next call for the full read timeout. Connection:
+    close means there is never an idle socket to reuse."""
+    c = ConduitClient(base_url="https://phab.example.test/api/", api_token="api-test-token")
+    assert c.session.headers["Connection"] == "close"
+    assert c.session.headers["User-Agent"]
+
+
+def test_call_retries_after_timeout(fake_session, monkeypatch):
+    """A single read timeout (the symptom of a stale socket) is retried on a
+    fresh connection and recovers — the safety net behind the keep-alive fix."""
+    monkeypatch.setattr("qreviews.conduit.time.sleep", lambda *a, **k: None)
+    fake_session.post.side_effect = [
+        requests.Timeout("read timed out"),
+        _ok_response({"data": [1]}),
+    ]
+    c = _make_client(fake_session)
+    assert c.call("differential.revision.search") == {"data": [1]}
+    assert fake_session.post.call_count == 2
+
+
 def test_resolve_project_phid(fake_session):
     fake_session.post.return_value = _ok_response(
         {"data": [{"phid": "PHID-PROJ-abc123"}]}
