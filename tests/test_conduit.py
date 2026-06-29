@@ -272,6 +272,39 @@ def test_revision_from_search_result_defaults_project_phids_to_empty():
     )
     assert r.project_phids == []
     assert r.reviewer_phids == []
+    assert r.reviewer_status == {}
+    assert r.blocking_reviewer_phids() == set()
+
+
+def test_revision_from_search_result_parses_reviewer_status():
+    r = Revision.from_search_result(
+        {
+            "phid": "PHID-DREV-3",
+            "id": 1001,
+            "fields": {
+                "title": "t",
+                "summary": "",
+                "status": {"value": "needs-review"},
+                "authorPHID": "PHID-USER-1",
+                "dateCreated": 0,
+                "dateModified": 0,
+            },
+            "attachments": {
+                "reviewers": {
+                    "reviewers": [
+                        # A rotation assigns one member the group's blocking slot.
+                        {"reviewerPHID": "PHID-USER-rotated", "status": "blocking"},
+                        {"reviewerPHID": "PHID-USER-extra", "status": "added"},
+                    ]
+                }
+            },
+        }
+    )
+    assert r.reviewer_status == {
+        "PHID-USER-rotated": "blocking",
+        "PHID-USER-extra": "added",
+    }
+    assert r.blocking_reviewer_phids() == {"PHID-USER-rotated"}
 
 
 def test_search_revisions_by_phids_requests_projects_attachment(fake_session):

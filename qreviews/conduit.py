@@ -20,7 +20,7 @@ import re
 import threading
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import requests
@@ -92,22 +92,35 @@ class Revision:
     date_modified: int
     reviewer_phids: list[str]
     project_phids: list[str]
+    # reviewer PHID -> reviewer status ("blocking", "added", "accepted", …).
+    # A round-robin "rotation" group never appears here while a revision is in
+    # needs-review; instead it is replaced by a single rotated member carrying
+    # the group's "blocking" slot, which `blocking_reviewer_phids` surfaces.
+    reviewer_status: dict[str, str] = field(default_factory=dict)
 
     @property
     def display_id(self) -> str:
         return f"D{self.id}"
+
+    def blocking_reviewer_phids(self) -> set[str]:
+        """Reviewer PHIDs whose status is `blocking`."""
+        return {phid for phid, status in self.reviewer_status.items() if status == "blocking"}
 
     @classmethod
     def from_search_result(cls, item: dict[str, Any]) -> Revision:
         fields = item.get("fields", {})
         bug = fields.get("bugzilla.bug-id")
         reviewers = []
+        reviewer_status: dict[str, str] = {}
         attachments = item.get("attachments") or {}
         reviewer_block = attachments.get("reviewers") or {}
         for r in reviewer_block.get("reviewers", []) or []:
             phid = r.get("reviewerPHID")
             if phid:
                 reviewers.append(phid)
+                status = r.get("status")
+                if status:
+                    reviewer_status[phid] = status
         projects_block = attachments.get("projects") or {}
         project_phids = [p for p in (projects_block.get("projectPHIDs") or []) if p]
         return cls(
@@ -123,6 +136,7 @@ class Revision:
             date_modified=int(fields.get("dateModified") or 0),
             reviewer_phids=reviewers,
             project_phids=project_phids,
+            reviewer_status=reviewer_status,
         )
 
 
