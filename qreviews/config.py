@@ -68,6 +68,13 @@ class ReviewerGroup(BaseModel):
     # the Phabricator project corresponding to this group. Set to false to
     # open the group up to external authors.
     restrict_to_member_authors: bool = True
+    # When true, treat this group as a Phabricator round-robin "rotation". For
+    # such a group the group PHID is not held as a reviewer during needs-review
+    # — Phabricator swaps in a single rotated member carrying the group's
+    # blocking slot. The poller then discovers revisions by member PHID and
+    # scopes to the rotation assignment (a member holding a blocking reviewer
+    # slot) instead of by the group PHID, which never matches.
+    rotation: bool = False
 
     def effective_risk_threshold(self, defaults: Defaults) -> int:
         return self.risk_threshold if self.risk_threshold is not None else defaults.risk_threshold

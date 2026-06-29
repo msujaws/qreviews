@@ -53,3 +53,11 @@ reviewer_groups:
   - slug: home-newtab-reviewers-rotation
     enabled: true
     skill_path: skills/home-newtab-review/SKILL.md
+    # This is a Phabricator round-robin rotation: the group PHID is never the
+    # reviewer during needs-review — it is replaced by a single rotated member
+    # holding a blocking slot. Poll by member PHID and scope to that blocking
+    # assignment instead of the group PHID (which never matches).
+    rotation: true
+    # The rotation already scopes review to this team, and it may route in
+    # revisions authored by non-members, so don't additionally gate on author.
+    restrict_to_member_authors: false

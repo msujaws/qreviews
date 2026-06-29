@@ -466,3 +466,73 @@ def test_process_revision_threads_supplemental_skills_into_review(
     system_text = review_call.kwargs["system"][0]["text"]
     assert "DESKTOP THEME RULES" in system_text
     assert "Additional reviewer-group context" in system_text
+
+
+def _rotation_rev(revision_id: int, member_phid: str, status: str) -> Revision:
+    """A needs-review revision surfaced by the member query, with the given
+    member carrying the given reviewer status."""
+    return Revision(
+        **{
+            **_rev(revision_id=revision_id).__dict__,
+            "reviewer_phids": [member_phid],
+            "reviewer_status": {member_phid: status},
+        }
+    )
+
+
+def test_rotation_group_queries_by_members_and_keeps_blocking(mocked_poller):
+    poller, conduit, _ = mocked_poller
+    group = poller.config.group_by_slug("home-newtab-reviewers-rotation")
+    group.enabled = True
+    group.rotation = True
+
+    members = {"PHID-USER-m1", "PHID-USER-m2"}
+    conduit.resolve_project_phid.return_value = "PHID-PROJ-newtab"
+    conduit.project_members.return_value = members
+
+    # One rotation assignment (member holds a blocking slot) and one incidental
+    # non-blocking member review that must be excluded.
+    assigned = _rotation_rev(201, "PHID-USER-m1", "blocking")
+    incidental = _rotation_rev(202, "PHID-USER-m2", "added")
+    conduit.search_revisions.return_value = [assigned, incidental]
+
+    processed: list[int] = []
+    poller.process_revision = MagicMock(  # type: ignore[method-assign]
+        side_effect=lambda rev, g, dry_run: processed.append(rev.id)
+    )
+
+    poller.poll_group(group, dry_run=True)
+
+    # Only the blocking-member revision is processed.
+    assert processed == [201]
+    # Discovery is by member PHID, not the group PHID.
+    kwargs = conduit.search_revisions.call_args.kwargs
+    assert set(kwargs["reviewer_phids"]) == members
+    # Watermark advances from the full search window, including the excluded row.
+    assert poller.store.get_watermark(group.slug) == assigned.date_modified
+
+
+def test_rotation_group_with_no_members_is_skipped(mocked_poller):
+    poller, conduit, _ = mocked_poller
+    group = poller.config.group_by_slug("home-newtab-reviewers-rotation")
+    group.enabled = True
+    group.rotation = True
+    conduit.resolve_project_phid.return_value = "PHID-PROJ-newtab"
+    conduit.project_members.return_value = set()
+    poller.process_revision = MagicMock()  # type: ignore[method-assign]
+
+    assert poller.poll_group(group, dry_run=True) == []
+    conduit.search_revisions.assert_not_called()
+    poller.process_revision.assert_not_called()
+
+
+def test_plain_group_still_queries_by_group_phid(mocked_poller):
+    poller, conduit, anthropic = mocked_poller
+    anthropic.messages.create.return_value = _claude_text(
+        json.dumps({"risk": 5, "complexity": 5, "risk_factors": [], "complexity_factors": []})
+    )
+    group = poller.config.enabled_groups()[0]  # ip-protection: rotation defaults False
+    assert group.rotation is False
+    poller.poll_group(group, dry_run=True)
+    kwargs = conduit.search_revisions.call_args.kwargs
+    assert kwargs["reviewer_phids"] == ["PHID-PROJ-ip"]

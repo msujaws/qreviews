@@ -561,17 +561,43 @@ class Poller:
         overlap = self.config.phabricator.watermark_overlap_seconds
         modified_since = (last - overlap) if last else (int(time.time()) - 86400)
 
-        revisions = self.conduit.search_revisions(
-            reviewer_phids=[phid],
-            statuses=("needs-review",),
-            modified_since=modified_since,
-        )
-        log.info(
-            "group %s: %d revisions modified since %d",
-            group.slug,
-            len(revisions),
-            modified_since,
-        )
+        if group.rotation:
+            # A round-robin rotation never holds the group PHID as a reviewer
+            # during needs-review; Phabricator swaps in a single rotated member
+            # carrying the group's blocking slot. Query by member PHID, then
+            # keep revisions where a member holds a blocking slot — the rotation
+            # assignment — to exclude members' incidental (non-blocking) reviews.
+            members = self.resolve_group_members(group.slug, phid)
+            if not members:
+                log.warning("group %s: rotation group has no members; skipping", group.slug)
+                return []
+            found = self.conduit.search_revisions(
+                reviewer_phids=sorted(members),
+                statuses=("needs-review",),
+                modified_since=modified_since,
+            )
+            revisions = [r for r in found if r.blocking_reviewer_phids() & members]
+            log.info(
+                "group %s: %d revisions modified since %d "
+                "(%d member-reviewed, rotation-filtered)",
+                group.slug,
+                len(revisions),
+                modified_since,
+                len(found),
+            )
+        else:
+            found = self.conduit.search_revisions(
+                reviewer_phids=[phid],
+                statuses=("needs-review",),
+                modified_since=modified_since,
+            )
+            revisions = found
+            log.info(
+                "group %s: %d revisions modified since %d",
+                group.slug,
+                len(revisions),
+                modified_since,
+            )
 
         results: list[ProcessResult] = []
         for rev in revisions:
@@ -580,9 +606,11 @@ class Poller:
             except Exception:
                 log.exception("error processing %s", rev.display_id)
 
-        # Advance watermark to the most recent modification we observed (or now).
-        if revisions:
-            new_watermark = max(r.date_modified for r in revisions)
+        # Advance the watermark from the full search window — not the
+        # rotation-filtered subset — so a window whose newest rows are all
+        # filtered out still advances and isn't re-scanned every cycle.
+        if found:
+            new_watermark = max(r.date_modified for r in found)
             self.store.set_watermark(group.slug, new_watermark)
 
         return results
