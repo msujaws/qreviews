@@ -17,9 +17,10 @@ class PhabricatorConfig(BaseModel):
     user_agent: str = "qreviews-bot/0.1"
     watermark_overlap_seconds: int = 60
     max_diff_bytes: int = 200_000
-    # PHIDs of non-application bots whose comments should not count as human
-    # engagement (Lando, BMO-bot, internal CI, etc.). Herald and other
-    # PHID-APPL-* application transactions are filtered automatically.
+    # PHIDs of user-account bots whose comments should not count as human
+    # engagement (Lando, BMO-bot, internal CI, etc.). Only PHID-USER- accounts
+    # count as human commenters, so application actors (Herald, etc.) are
+    # filtered automatically and need not be listed here.
     ignore_commenter_phids: list[str] = Field(default_factory=list)
     # Project slug that Mozilla uses to mark security-sensitive revisions.
     # Revisions tagged with this project are skipped entirely — no diff

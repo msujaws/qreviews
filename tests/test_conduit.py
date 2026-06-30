@@ -444,8 +444,9 @@ def test_human_commenter_phids_filters_author_apps_and_ignored(fake_session):
             "data": [
                 # Author's own comment — filtered.
                 _tx(author="PHID-USER-author"),
-                # Herald (application) — filtered by PHID-APPL- prefix.
-                _tx(author="PHID-APPL-PhabricatorHeraldApplication"),
+                # Herald (application) — filtered: not a PHID-USER- account.
+                # Mozilla's real Herald PHID is PHID-APPS-, not PHID-APPL-.
+                _tx(author="PHID-APPS-PhabricatorHeraldApplication"),
                 # In ignore list — filtered.
                 _tx(author="PHID-USER-landobot"),
                 # Empty comments array — filtered.
@@ -471,11 +472,14 @@ def test_human_commenter_phids_filters_author_apps_and_ignored(fake_session):
 
 
 def test_human_commenter_phids_empty_when_only_author_and_herald(fake_session):
+    # A revision with only the author's comment and Herald's automated comment
+    # has no human reviewer engaged. This is the common state for review-rotation
+    # revisions, which always carry a Herald comment from creation.
     fake_session.post.return_value = _ok_response(
         {
             "data": [
                 _tx(author="PHID-USER-author"),
-                _tx(author="PHID-APPL-PhabricatorHeraldApplication"),
+                _tx(author="PHID-APPS-PhabricatorHeraldApplication"),
             ]
         }
     )

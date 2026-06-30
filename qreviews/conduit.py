@@ -483,14 +483,22 @@ class ConduitClient:
         author_phid: str,
         ignore_phids: set[str] | None = None,
     ) -> set[str]:
-        """Return PHIDs of non-author, non-application users who have left a
-        comment (top-level or inline) on D<revision_id>.
+        """Return PHIDs of non-author human users who have left a comment
+        (top-level or inline) on D<revision_id>.
+
+        Only real user accounts (`PHID-USER-…`) count as human commenters.
+        This excludes application actors — notably Mozilla's Herald, which
+        posts an automated comment on every revision and whose PHID is
+        `PHID-APPS-PhabricatorHeraldApplication` (note: `PHID-APPS-`, not
+        `PHID-APPL-`). Review-rotation groups are driven by a Herald rule, so
+        every rotation revision carries a Herald comment from creation;
+        counting it as human would skip the whole group.
 
         Filters out:
         - the revision's own author
-        - any `authorPHID` starting with `PHID-APPL-` (Phabricator marks
-          application-issued transactions like Herald with this prefix)
-        - any PHID in `ignore_phids` (caller-supplied bot allowlist)
+        - any author that is not a `PHID-USER-` account (Herald, other apps)
+        - any PHID in `ignore_phids` (caller-supplied bot allowlist, e.g.
+          user-account bots like landobot)
         - transactions whose `comments` array is empty (deleted/placeholder)
         """
         ignore = ignore_phids or set()
@@ -506,9 +514,9 @@ class ConduitClient:
             if not tx.get("comments"):
                 continue
             phid = tx.get("authorPHID") or ""
-            if not phid or phid == author_phid:
+            if not phid.startswith("PHID-USER-"):
                 continue
-            if phid.startswith("PHID-APPL-"):
+            if phid == author_phid:
                 continue
             if phid in ignore:
                 continue
