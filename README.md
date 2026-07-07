@@ -306,6 +306,14 @@ reviewer_groups:
 4. `python -m qreviews resolve-phids` to cache the new PHID.
 5. Restart `qreviews poll`.
 
+For a Phabricator round-robin rotation, set `rotation: true`. The rotation
+never holds the group PHID as a reviewer during needs-review — Phabricator
+swaps in a single rotated member — so the poller queries by member PHID and
+keeps revisions where a member holds a blocking slot. Because a member can
+belong to several rotations, that alone would over-match; the poller
+confirms the group's own PHID appears in the revision's reviewer transaction
+history before attributing the review.
+
 ---
 
 ## CLI

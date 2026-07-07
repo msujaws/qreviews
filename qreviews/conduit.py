@@ -96,6 +96,9 @@ class Revision:
     # A round-robin "rotation" group never appears here while a revision is in
     # needs-review; instead it is replaced by a single rotated member carrying
     # the group's "blocking" slot, which `blocking_reviewer_phids` surfaces.
+    # That member may belong to several rotations, so a blocking slot only
+    # points at *a* rotation; `reviewer_project_phids_in_history` disambiguates
+    # which rotation actually assigned it.
     reviewer_status: dict[str, str] = field(default_factory=dict)
 
     @property

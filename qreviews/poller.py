@@ -591,8 +591,10 @@ class Poller:
             # A round-robin rotation never holds the group PHID as a reviewer
             # during needs-review; Phabricator swaps in a single rotated member
             # carrying the group's blocking slot. Query by member PHID, then
-            # keep revisions where a member holds a blocking slot — the rotation
-            # assignment — to exclude members' incidental (non-blocking) reviews.
+            # keep revisions where a member holds a blocking slot to exclude
+            # members' incidental (non-blocking) reviews. A blocking slot alone
+            # isn't proof this rotation assigned it — see the provenance check
+            # below.
             members = self.resolve_group_members(group.slug, phid)
             if not members:
                 log.warning("group %s: rotation group has no members; skipping", group.slug)
