@@ -522,3 +522,35 @@ class ConduitClient:
                 continue
             commenters.add(phid)
         return commenters
+
+    def reviewer_project_phids_in_history(self, revision_id: int) -> set[str]:
+        """Return every `PHID-PROJ-` referenced by a reviewers transaction on
+        D<revision_id>.
+
+        A round-robin rotation is recorded as a reviewers transaction whose
+        operations remove the group PHID (`PHID-PROJ-`) and add the rotated
+        member (`PHID-USER-`). Collecting the project PHIDs from those
+        operations tells us which rotation groups actually drove a reviewer
+        change on this revision — the assignment's provenance — regardless of
+        which member currently holds the blocking slot. A member holding a
+        blocking slot is necessary but not sufficient to attribute a revision
+        to a rotation; the group PHID must also appear here.
+
+        Reviewer transactions are few, so a single unpaginated page
+        (`limit=100`, newest first) is sufficient in practice.
+        """
+        params = {
+            "objectIdentifier": f"D{revision_id}",
+            "limit": 100,
+        }
+        result = self.call("transaction.search", params)
+        projects: set[str] = set()
+        for tx in result.get("data", []) or []:
+            if tx.get("type") != "reviewers":
+                continue
+            operations = (tx.get("fields") or {}).get("operations") or []
+            for op in operations:
+                phid = op.get("phid") or ""
+                if phid.startswith("PHID-PROJ-"):
+                    projects.add(phid)
+        return projects

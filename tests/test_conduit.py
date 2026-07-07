@@ -500,6 +500,68 @@ def test_human_commenter_phids_sends_correct_params(fake_session):
     assert ("limit", "100") in data
 
 
+def _reviewers_tx(*, operations: list[dict]) -> dict:
+    return {"type": "reviewers", "fields": {"operations": operations}}
+
+
+def test_reviewer_project_phids_in_history_collects_proj_from_operations(fake_session):
+    fake_session.post.return_value = _ok_response(
+        {
+            "data": [
+                # Round-robin swap: remove the group, add the rotated member.
+                _reviewers_tx(
+                    operations=[
+                        {"operation": "remove", "phid": "PHID-PROJ-settings"},
+                        {"operation": "add", "phid": "PHID-USER-mconley"},
+                    ]
+                ),
+                # A comment transaction — ignored.
+                _tx(author="PHID-USER-alice"),
+                # A second rotation touched the revision too.
+                _reviewers_tx(operations=[{"operation": "add", "phid": "PHID-PROJ-newtab"}]),
+            ]
+        }
+    )
+    c = _make_client(fake_session)
+    # PHID-USER- operands are excluded; both project PHIDs are collected.
+    assert c.reviewer_project_phids_in_history(310811) == {
+        "PHID-PROJ-settings",
+        "PHID-PROJ-newtab",
+    }
+
+
+def test_reviewer_project_phids_in_history_empty_without_reviewers_tx(fake_session):
+    fake_session.post.return_value = _ok_response(
+        {
+            "data": [
+                _tx(author="PHID-USER-alice"),
+                {"type": "status", "authorPHID": "PHID-USER-bob", "comments": []},
+            ]
+        }
+    )
+    c = _make_client(fake_session)
+    assert c.reviewer_project_phids_in_history(310811) == set()
+
+
+def test_reviewer_project_phids_in_history_tolerates_missing_operations(fake_session):
+    fake_session.post.return_value = _ok_response(
+        {"data": [{"type": "reviewers", "fields": {}}]}
+    )
+    c = _make_client(fake_session)
+    assert c.reviewer_project_phids_in_history(310811) == set()
+
+
+def test_reviewer_project_phids_in_history_sends_correct_params(fake_session):
+    fake_session.post.return_value = _ok_response({"data": []})
+    c = _make_client(fake_session)
+    c.reviewer_project_phids_in_history(310811)
+    args, kwargs = fake_session.post.call_args
+    assert args[0] == "https://phab.example.test/api/transaction.search"
+    data = kwargs["data"]
+    assert ("objectIdentifier", "D310811") in data
+    assert ("limit", "100") in data
+
+
 def test_diff_from_search_result():
     d = Diff.from_search_result(
         {"phid": "PHID-DIFF-7", "id": 7, "fields": {"revisionPHID": "PHID-DREV-1", "dateCreated": 1}}
