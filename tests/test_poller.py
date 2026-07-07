@@ -489,6 +489,8 @@ def test_rotation_group_queries_by_members_and_keeps_blocking(mocked_poller):
     members = {"PHID-USER-m1", "PHID-USER-m2"}
     conduit.resolve_project_phid.return_value = "PHID-PROJ-newtab"
     conduit.project_members.return_value = members
+    # This rotation genuinely assigned the review — its PHID is in the history.
+    conduit.reviewer_project_phids_in_history.return_value = {"PHID-PROJ-newtab"}
 
     # One rotation assignment (member holds a blocking slot) and one incidental
     # non-blocking member review that must be excluded.
@@ -510,6 +512,92 @@ def test_rotation_group_queries_by_members_and_keeps_blocking(mocked_poller):
     assert set(kwargs["reviewer_phids"]) == members
     # Watermark advances from the full search window, including the excluded row.
     assert poller.store.get_watermark(group.slug) == assigned.date_modified
+
+
+def test_rotation_group_drops_foreign_rotation_match(mocked_poller):
+    # A member of this rotation holds a blocking slot, but the assignment came
+    # from a *different* rotation they also belong to (the D310811 case: mconley
+    # blocking via settings-reviewers-rotation, also a home-newtab member). The
+    # newtab poll must not claim it.
+    poller, conduit, _ = mocked_poller
+    group = poller.config.group_by_slug("home-newtab-reviewers-rotation")
+    group.enabled = True
+    group.rotation = True
+
+    members = {"PHID-USER-mconley"}
+    conduit.resolve_project_phid.return_value = "PHID-PROJ-newtab"
+    conduit.project_members.return_value = members
+    # Only a foreign rotation's PHID appears in the reviewer history.
+    conduit.reviewer_project_phids_in_history.return_value = {"PHID-PROJ-settings"}
+
+    rev = _rotation_rev(310811, "PHID-USER-mconley", "blocking")
+    conduit.search_revisions.return_value = [rev]
+
+    processed: list[int] = []
+    poller.process_revision = MagicMock(  # type: ignore[method-assign]
+        side_effect=lambda r, g, dry_run: processed.append(r.id)
+    )
+
+    poller.poll_group(group, dry_run=True)
+
+    # The foreign-rotation match is dropped.
+    assert processed == []
+    # ...but the watermark still advances from the full search window so the
+    # revision isn't re-scanned every cycle.
+    assert poller.store.get_watermark(group.slug) == rev.date_modified
+
+
+def test_rotation_group_kept_when_group_phid_in_history(mocked_poller):
+    # Two rotations both touched the revision; this group is one of them, so it
+    # is legitimately attributed.
+    poller, conduit, _ = mocked_poller
+    group = poller.config.group_by_slug("home-newtab-reviewers-rotation")
+    group.enabled = True
+    group.rotation = True
+
+    members = {"PHID-USER-mconley"}
+    conduit.resolve_project_phid.return_value = "PHID-PROJ-newtab"
+    conduit.project_members.return_value = members
+    conduit.reviewer_project_phids_in_history.return_value = {
+        "PHID-PROJ-settings",
+        "PHID-PROJ-newtab",
+    }
+
+    rev = _rotation_rev(203, "PHID-USER-mconley", "blocking")
+    conduit.search_revisions.return_value = [rev]
+
+    processed: list[int] = []
+    poller.process_revision = MagicMock(  # type: ignore[method-assign]
+        side_effect=lambda r, g, dry_run: processed.append(r.id)
+    )
+
+    poller.poll_group(group, dry_run=True)
+    assert processed == [203]
+
+
+def test_rotation_group_fail_open_on_history_error(mocked_poller):
+    # A transient history-lookup failure should keep the candidate rather than
+    # silently drop a legitimate rotation review.
+    poller, conduit, _ = mocked_poller
+    group = poller.config.group_by_slug("home-newtab-reviewers-rotation")
+    group.enabled = True
+    group.rotation = True
+
+    members = {"PHID-USER-m1"}
+    conduit.resolve_project_phid.return_value = "PHID-PROJ-newtab"
+    conduit.project_members.return_value = members
+    conduit.reviewer_project_phids_in_history.side_effect = RuntimeError("boom")
+
+    rev = _rotation_rev(204, "PHID-USER-m1", "blocking")
+    conduit.search_revisions.return_value = [rev]
+
+    processed: list[int] = []
+    poller.process_revision = MagicMock(  # type: ignore[method-assign]
+        side_effect=lambda r, g, dry_run: processed.append(r.id)
+    )
+
+    poller.poll_group(group, dry_run=True)
+    assert processed == [204]
 
 
 def test_rotation_group_with_no_members_is_skipped(mocked_poller):
@@ -536,3 +624,5 @@ def test_plain_group_still_queries_by_group_phid(mocked_poller):
     poller.poll_group(group, dry_run=True)
     kwargs = conduit.search_revisions.call_args.kwargs
     assert kwargs["reviewer_phids"] == ["PHID-PROJ-ip"]
+    # Provenance confirmation is rotation-only; plain groups never pay for it.
+    conduit.reviewer_project_phids_in_history.assert_not_called()

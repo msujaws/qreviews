@@ -552,6 +552,32 @@ class Poller:
 
     # ------------------------------------------------------------ per-group
 
+    def _rotation_assigned(self, revision: Revision, group_phid: str) -> bool:
+        """Whether `group_phid`'s rotation actually assigned a reviewer on this
+        revision, confirmed via the reviewer transaction history.
+
+        Fails open: if the history lookup errors we keep the revision rather
+        than silently dropping a legitimate rotation review, mirroring the
+        empty-member-lookup posture elsewhere in this class.
+        """
+        try:
+            history = self.conduit.reviewer_project_phids_in_history(revision.id)
+        except Exception:
+            log.warning(
+                "%s: reviewer history lookup failed; keeping rotation candidate",
+                revision.display_id,
+            )
+            return True
+        if group_phid in history:
+            return True
+        log.info(
+            "skipping %s: a rotation member is blocking, but %s did not assign "
+            "the review (foreign rotation)",
+            revision.display_id,
+            group_phid,
+        )
+        return False
+
     def poll_group(self, group: ReviewerGroup, *, dry_run: bool = False) -> list[ProcessResult]:
         if not group.enabled:
             return []
@@ -576,14 +602,21 @@ class Poller:
                 statuses=("needs-review",),
                 modified_since=modified_since,
             )
-            revisions = [r for r in found if r.blocking_reviewer_phids() & members]
+            # A member holding a blocking slot is necessary but not sufficient:
+            # a member of this rotation may hold that slot because a *different*
+            # rotation they also belong to routed the review to them. Confirm
+            # provenance — this group's PHID must appear in the revision's
+            # reviewer transaction history (added, then round-robin-expanded).
+            candidates = [r for r in found if r.blocking_reviewer_phids() & members]
+            revisions = [r for r in candidates if self._rotation_assigned(r, phid)]
             log.info(
                 "group %s: %d revisions modified since %d "
-                "(%d member-reviewed, rotation-filtered)",
+                "(%d member-reviewed, %d rotation-assigned)",
                 group.slug,
                 len(revisions),
                 modified_since,
-                len(found),
+                len(candidates),
+                len(revisions),
             )
         else:
             found = self.conduit.search_revisions(
