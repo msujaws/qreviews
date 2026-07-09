@@ -53,6 +53,8 @@ reviewer_groups:
   - slug: home-newtab-reviewers-rotation
     enabled: true
     skill_path: skills/home-newtab-review/SKILL.md
+    risk_threshold: 4
+    complexity_threshold: 4
     # This is a Phabricator round-robin rotation: the group PHID is never the
     # reviewer during needs-review — it is replaced by a single rotated member
     # holding a blocking slot. Poll by member PHID and scope to that blocking
