@@ -63,3 +63,10 @@ reviewer_groups:
     # The rotation already scopes review to this team, and it may route in
     # revisions authored by non-members, so don't additionally gate on author.
     restrict_to_member_authors: false
+
+  - slug: omc-reviewers
+    enabled: true
+    skill_path: skills/review-using-docs/SKILL.md
+    risk_threshold: 4
+    complexity_threshold: 4
+    restrict_to_member_authors: true
