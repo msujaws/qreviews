@@ -512,6 +512,27 @@ class Poller:
                 revision_id=revision.id, posted=False, skipped_reason="review_error"
             )
 
+        if review.iteration_limit_exceeded:
+            log.warning(
+                "%s: review exhausted tool-iteration budget; not posting",
+                revision.display_id,
+            )
+            self.store.record_reviewed(
+                revision_phid=revision.phid,
+                diff_phid=diff.phid,
+                review_body="",
+                model=review.model,
+                usage=review.usage,
+                posted=False,
+                skipped_reason="tool_iteration_limit",
+                tool_calls=review.tool_calls,
+            )
+            return ProcessResult(
+                revision_id=revision.id,
+                posted=False,
+                skipped_reason="tool_iteration_limit",
+            )
+
         rendered = render_comment(
             revision_phid=revision.phid,
             scores=scoring.scores,

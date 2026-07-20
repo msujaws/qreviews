@@ -10,6 +10,7 @@ import pytest
 
 from qreviews.conduit import Diff, Revision
 from qreviews.poller import Poller
+from qreviews.review import ReviewResult
 
 
 def _rev(
@@ -105,6 +106,25 @@ def test_process_revision_above_threshold_skips(mocked_poller):
     result = poller.process_revision(_rev(), group)
     assert result.posted is False
     assert result.skipped_reason == "above_threshold"
+    conduit.publish_review.assert_not_called()
+    conduit.create_inline.assert_not_called()
+
+
+def test_exhausted_tool_budget_does_not_post(mocked_poller, mocker):
+    poller, conduit, anthropic = mocked_poller
+    # Scoring resolves below threshold so we reach the review stage.
+    anthropic.messages.create.return_value = _claude_text(json.dumps({
+        "risk": 1, "complexity": 1, "risk_factors": ["docs"], "complexity_factors": ["3 LOC"],
+    }))
+    mocker.patch(
+        "qreviews.poller.generate_review",
+        return_value=ReviewResult(summary="", iteration_limit_exceeded=True),
+    )
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(_rev(), group, dry_run=False)
+
+    assert result.posted is False
+    assert result.skipped_reason == "tool_iteration_limit"
     conduit.publish_review.assert_not_called()
     conduit.create_inline.assert_not_called()
 
