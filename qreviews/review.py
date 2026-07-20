@@ -218,7 +218,7 @@ SUPPLEMENTAL_SKILLS_HEADER = (
 )
 
 
-MAX_TOOL_ITERATIONS = 8
+MAX_TOOL_ITERATIONS = 16
 
 
 @dataclass
@@ -244,6 +244,10 @@ class ReviewResult:
     # Findings the model named but that didn't match a legal diff
     # anchor; their bodies were appended to `summary`.
     rejected_count: int = 0
+    # True when the agentic loop exhausted its tool-iteration budget
+    # without the model producing a final answer. The caller skips
+    # posting when this is set.
+    iteration_limit_exceeded: bool = False
 
 
 def _build_user_message(
@@ -479,17 +483,10 @@ def generate_review(
 
         messages.append({"role": "user", "content": tool_results})
 
-    # Hit iteration cap — return what we have plus a note.
-    log.warning("review hit max tool iterations (%d)", max_iterations)
-    fallback_text = (
-        _final_text(response.content)
-        if response is not None
-        else "(review exceeded tool iteration limit; no final answer produced)"
-    )
-    result = parse_review_payload(fallback_text, legal_anchors=legal_anchors)
-    if not result.summary and not result.findings:
-        result.summary = "(review exceeded tool iteration limit; no final answer produced)"
-        result.parse_failed = True
+    # Hit iteration cap without a final answer. Signal the caller to skip
+    # posting rather than publishing a placeholder comment on the revision.
+    log.warning("review hit max tool iterations (%d); skipping post", max_iterations)
+    result = ReviewResult(summary="", iteration_limit_exceeded=True)
     result.model = model
     result.usage = aggregated_usage
     result.tool_calls = tool_calls

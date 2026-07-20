@@ -15,22 +15,49 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from qreviews.review import (
+    MAX_TOOL_ITERATIONS,
     SUPPLEMENTAL_SKILLS_HEADER,
     generate_review,
     parse_review_payload,
 )
 
 
+def _usage() -> SimpleNamespace:
+    return SimpleNamespace(
+        input_tokens=10,
+        output_tokens=5,
+        cache_read_input_tokens=0,
+        cache_creation_input_tokens=0,
+    )
+
+
 def _claude_response(text: str) -> SimpleNamespace:
     return SimpleNamespace(
         content=[SimpleNamespace(type="text", text=text)],
         stop_reason="end_turn",
-        usage=SimpleNamespace(
-            input_tokens=10,
-            output_tokens=5,
-            cache_read_input_tokens=0,
-            cache_creation_input_tokens=0,
-        ),
+        usage=_usage(),
+    )
+
+
+def _tool_use_response() -> SimpleNamespace:
+    """A response that keeps the agentic loop going by requesting a tool."""
+    return SimpleNamespace(
+        content=[
+            SimpleNamespace(
+                type="tool_use",
+                id="toolu_1",
+                name="read_file",
+                input={"path": "browser/foo.cpp"},
+                model_dump=lambda: {
+                    "type": "tool_use",
+                    "id": "toolu_1",
+                    "name": "read_file",
+                    "input": {"path": "browser/foo.cpp"},
+                },
+            )
+        ],
+        stop_reason="tool_use",
+        usage=_usage(),
     )
 
 
@@ -156,6 +183,35 @@ def test_prompt_includes_searchfox_when_available(mocker, tmp_path: Path):
     assert "searchfox" in system_text.lower()
     assert "find_definition" in system_text
     assert sent.get("tools") is not None
+
+
+def test_exhausted_tool_budget_signals_skip(mocker, tmp_path: Path):
+    """A model that never stops calling tools should exhaust the budget and
+    signal the caller to skip posting rather than publishing a placeholder."""
+    primary = _write_skill(tmp_path / "primary.md", "PRIMARY GUIDANCE")
+    mocker.patch("qreviews.review.has_searchfox", return_value=True)
+    mocker.patch("qreviews.review.execute_tool", return_value="tool output")
+    client = MagicMock()
+    client.messages.create.side_effect = lambda **_: _tool_use_response()
+
+    result = generate_review(
+        client,
+        model="claude-test",
+        max_tokens=128,
+        skill_path=primary,
+        title="t",
+        summary="s",
+        revision_id=1,
+        author_phid="PHID-USER-1",
+        bug_id=None,
+        raw_diff="@@",
+    )
+
+    assert client.messages.create.call_count == MAX_TOOL_ITERATIONS
+    assert result.iteration_limit_exceeded is True
+    assert result.summary == ""
+    assert "exceeded tool iteration limit" not in result.summary
+    assert result.tool_calls == MAX_TOOL_ITERATIONS
 
 
 def test_explicit_enable_tools_false_skips_probe(mocker, tmp_path: Path):
