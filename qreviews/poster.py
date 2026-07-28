@@ -1,11 +1,16 @@
 """Render and post the advisory review to Phabricator.
 
 The bot publishes most findings as inline comments anchored to a
-specific (file, line). A single top-level summary comment carries the
-scores/factors block, the qreviews footer, any narrative remainder
-from the model, and a pointer to the inlines. The summary is always
-posted (even when there are zero findings) so the dashboard footer
-and "advisory only" framing always appear.
+specific (file, line). A single top-level summary comment carries one
+sentence of scores, a pointer to the inlines, any narrative remainder
+from the model, and the qreviews footer. The summary is always posted
+(even when there are zero findings) so the dashboard footer and
+"advisory only" framing always appear.
+
+The scores line is deliberately terse. Per-axis risk and complexity
+factors used to be bulleted here — up to ten bullets ahead of anything
+actionable. They are still recorded in `qreviews/state.py` and rendered
+in the dashboard's revision drawer, which the footer deep-links to.
 """
 
 from __future__ import annotations
@@ -23,21 +28,8 @@ log = logging.getLogger(__name__)
 COMMENT_TEMPLATE = """\
 **qreviews — {headline}**
 
-Auto-reviewed because risk and complexity scored below the threshold of {threshold}.
-
-**Scores**
-- Risk: **{risk}/10**
-- Complexity: **{complexity}/10**
-
-**Risk factors**
-{risk_bullets}
-
-**Complexity factors**
-{complexity_bullets}
-
----
-
-{findings_section}{review_body_section}
+{score_sentence} {threshold_sentence} {findings_sentence}
+{review_body_section}
 ---
 *Advisory only — posted by [qreviews]({source_url}) using `{review_model}`. Does not accept, reject, or request changes.{dashboard_sentence}*
 """
@@ -53,12 +45,6 @@ class RenderedComment:
     revision_id: int | None = None
 
 
-def _bulletize(items: list[str]) -> str:
-    if not items:
-        return "- (no specific factors recorded)"
-    return "\n".join(f"- {item.strip()}" for item in items if item.strip())
-
-
 def _headline(findings_count: int) -> str:
     if findings_count == 0:
         return "no inline findings"
@@ -67,14 +53,24 @@ def _headline(findings_count: int) -> str:
     return f"{findings_count} inline findings on this diff"
 
 
-def _findings_section(findings_count: int) -> str:
-    if findings_count == 0:
-        return "No inline findings raised at the bot's confidence threshold.\n\n"
-    plural = "" if findings_count == 1 else "s"
+def _score_sentence(scores: Scores) -> str:
+    return f"Risk {scores.risk}/10, complexity {scores.complexity}/10."
+
+
+def _threshold_sentence(risk_threshold: int, complexity_threshold: int) -> str:
+    if risk_threshold == complexity_threshold:
+        return f"Below the auto-review threshold of {risk_threshold}."
     return (
-        f"Posted {findings_count} inline comment{plural} on this diff — "
-        f"see the file view above for line-anchored findings.\n\n"
+        f"Below the auto-review thresholds of {risk_threshold} risk and "
+        f"{complexity_threshold} complexity."
     )
+
+
+def _findings_sentence(findings_count: int) -> str:
+    if findings_count == 0:
+        return "No inline findings raised at the confidence threshold."
+    plural = "" if findings_count == 1 else "s"
+    return f"Posted {findings_count} inline comment{plural} on this diff."
 
 
 def render_comment(
@@ -83,7 +79,8 @@ def render_comment(
     scores: Scores,
     review_body: str,
     review_model: str,
-    threshold: int,
+    risk_threshold: int,
+    complexity_threshold: int,
     findings: list[Finding] | None = None,
     dashboard_url: str | None = None,
     revision_id: int | None = None,
@@ -97,15 +94,12 @@ def render_comment(
     else:
         dashboard_sentence = ""
     summary_text = review_body.strip()
-    review_body_section = f"{summary_text}\n\n" if summary_text else ""
+    review_body_section = f"\n{summary_text}\n" if summary_text else ""
     body = COMMENT_TEMPLATE.format(
         headline=_headline(len(findings)),
-        threshold=threshold,
-        risk=scores.risk,
-        complexity=scores.complexity,
-        risk_bullets=_bulletize(scores.risk_factors),
-        complexity_bullets=_bulletize(scores.complexity_factors),
-        findings_section=_findings_section(len(findings)),
+        score_sentence=_score_sentence(scores),
+        threshold_sentence=_threshold_sentence(risk_threshold, complexity_threshold),
+        findings_sentence=_findings_sentence(len(findings)),
         review_body_section=review_body_section,
         review_model=review_model,
         source_url=SOURCE_URL,

@@ -22,28 +22,68 @@ def _finding(path: str = "browser/components/newtab/Foo.jsx", line: int = 10) ->
     return Finding(file_path=path, line=line, is_new_file=True, body="Fix the thing.")
 
 
-def test_render_includes_scores_and_factors():
+def test_render_collapses_scores_to_one_sentence():
     out = render_comment(
         revision_phid="PHID-DREV-1",
         scores=_scores(),
-        review_body="### Looks good\n\nNo findings.",
+        review_body="This commit lacks a corresponding test file.",
         review_model="claude-sonnet-4-6",
-        threshold=2,
+        risk_threshold=2,
+        complexity_threshold=2,
     )
-    assert "Risk: **1/10**" in out.body
-    assert "Complexity: **0/10**" in out.body
-    assert "browser/components/newtab/styles.css" in out.body
-    assert "3 LOC added" in out.body
-    assert "No findings." in out.body
+    assert "Risk 1/10, complexity 0/10." in out.body
+    assert "Below the auto-review threshold of 2." in out.body
+    assert "This commit lacks a corresponding test file." in out.body
     # Footer references the service and links to the source on GitHub.
     assert "qreviews" in out.body
     assert SOURCE_URL in out.body
     assert "advisory only" in out.body.lower()
-    # Style-guide invariants: no emoji in the wrapper, and the factor
-    # sections use neutral Mozilla-bug-style labels.
+    # Style-guide invariants: no emoji, and no middot separator.
     assert "🤖" not in out.body
-    assert "Risk factors" in out.body
-    assert "Complexity factors" in out.body
+    assert "·" not in out.body
+
+
+def test_render_omits_score_factors():
+    # Factors live in the DB and the dashboard drawer, not in the comment —
+    # ten bullets of bot rationale ahead of anything actionable.
+    out = render_comment(
+        revision_phid="PHID-DREV-1",
+        scores=_scores(),
+        review_body="",
+        review_model="claude-sonnet-4-6",
+        risk_threshold=2,
+        complexity_threshold=2,
+    )
+    assert "browser/components/newtab/styles.css" not in out.body
+    assert "3 LOC added" not in out.body
+    assert "Risk factors" not in out.body
+    assert "Complexity factors" not in out.body
+
+
+def test_render_body_stays_short():
+    out = render_comment(
+        revision_phid="PHID-DREV-1",
+        scores=_scores(),
+        review_body="",
+        review_model="claude-sonnet-4-6",
+        risk_threshold=2,
+        complexity_threshold=2,
+        dashboard_url="https://qreviews.example",
+        revision_id=12345,
+    )
+    assert len(out.body.splitlines()) <= 8
+
+
+def test_render_names_both_thresholds_when_they_differ():
+    out = render_comment(
+        revision_phid="PHID-DREV-1",
+        scores=_scores(),
+        review_body="",
+        review_model="claude-sonnet-4-6",
+        risk_threshold=4,
+        complexity_threshold=3,
+    )
+    assert "Below the auto-review thresholds of 4 risk and 3 complexity." in out.body
 
 
 def test_render_includes_deep_link_when_url_and_revision_id_provided():
@@ -52,7 +92,8 @@ def test_render_includes_deep_link_when_url_and_revision_id_provided():
         scores=_scores(),
         review_body="ok",
         review_model="claude-sonnet-4-6",
-        threshold=2,
+        risk_threshold=2,
+        complexity_threshold=2,
         dashboard_url="https://qreviews.example",
         revision_id=12345,
     )
@@ -66,7 +107,8 @@ def test_render_deep_link_strips_trailing_slash_on_base_url():
         scores=_scores(),
         review_body="ok",
         review_model="m",
-        threshold=2,
+        risk_threshold=2,
+        complexity_threshold=2,
         dashboard_url="https://qreviews.example/",
         revision_id=7,
     )
@@ -80,7 +122,8 @@ def test_render_falls_back_when_revision_id_missing():
         scores=_scores(),
         review_body="ok",
         review_model="claude-sonnet-4-6",
-        threshold=2,
+        risk_threshold=2,
+        complexity_threshold=2,
         dashboard_url="https://qreviews.example",
         revision_id=None,
     )
@@ -95,7 +138,8 @@ def test_render_omits_dashboard_sentence_when_url_unset():
         scores=_scores(),
         review_body="ok",
         review_model="claude-sonnet-4-6",
-        threshold=2,
+        risk_threshold=2,
+        complexity_threshold=2,
         dashboard_url=None,
         revision_id=12345,
     )
@@ -112,7 +156,8 @@ def test_render_headline_reflects_findings_count():
         scores=_scores(),
         review_body="",
         review_model="m",
-        threshold=2,
+        risk_threshold=2,
+        complexity_threshold=2,
     )
     assert "no inline findings" in no_findings.body.lower()
 
@@ -121,7 +166,8 @@ def test_render_headline_reflects_findings_count():
         scores=_scores(),
         review_body="",
         review_model="m",
-        threshold=2,
+        risk_threshold=2,
+        complexity_threshold=2,
         findings=[_finding()],
     )
     assert "1 inline finding" in one.body
@@ -131,7 +177,8 @@ def test_render_headline_reflects_findings_count():
         scores=_scores(),
         review_body="",
         review_model="m",
-        threshold=2,
+        risk_threshold=2,
+        complexity_threshold=2,
         findings=[_finding(), _finding(line=20)],
     )
     assert "2 inline findings" in two.body
@@ -143,7 +190,8 @@ def test_render_attaches_findings_for_posting():
         scores=_scores(),
         review_body="",
         review_model="m",
-        threshold=2,
+        risk_threshold=2,
+        complexity_threshold=2,
         findings=[_finding()],
     )
     assert len(out.findings) == 1
@@ -156,7 +204,8 @@ def test_post_review_creates_inlines_then_publishes():
         scores=_scores(),
         review_body="",
         review_model="m",
-        threshold=2,
+        risk_threshold=2,
+        complexity_threshold=2,
         findings=[_finding(), _finding(path="b.cpp", line=42)],
         revision_id=302879,
     )
@@ -184,7 +233,8 @@ def test_post_review_dry_run_emits_no_calls():
         scores=_scores(),
         review_body="",
         review_model="m",
-        threshold=2,
+        risk_threshold=2,
+        complexity_threshold=2,
         findings=[_finding()],
         revision_id=302879,
     )
@@ -202,7 +252,8 @@ def test_post_review_continues_past_inline_errors():
         scores=_scores(),
         review_body="",
         review_model="m",
-        threshold=2,
+        risk_threshold=2,
+        complexity_threshold=2,
         findings=[_finding(), _finding(path="b.cpp", line=42)],
         revision_id=302879,
     )
@@ -219,7 +270,8 @@ def test_post_review_skips_publish_when_revision_id_missing():
         scores=_scores(),
         review_body="",
         review_model="m",
-        threshold=2,
+        risk_threshold=2,
+        complexity_threshold=2,
         findings=[_finding()],
     )
     posted = post_review(client, rendered=rendered, diff_id=99)

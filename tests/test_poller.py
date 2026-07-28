@@ -92,7 +92,7 @@ def test_process_revision_below_threshold_posts(mocked_poller):
     conduit.publish_review.assert_called_once()
     # The posted body should carry the score scaffold and the no-findings line.
     body = conduit.publish_review.call_args.args[1]
-    assert "Risk: **1/10**" in body
+    assert "Risk 1/10, complexity 1/10." in body
     assert "No inline findings raised" in body
 
 
