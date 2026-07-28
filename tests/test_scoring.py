@@ -121,3 +121,22 @@ def test_score_revision_bad_json_raises():
             bug_id=None,
             raw_diff="@@",
         )
+
+
+def test_score_revision_wrong_shaped_json_raises():
+    # A JSON object that isn't a score payload must not be accepted just
+    # because it parses.
+    client = MagicMock()
+    client.messages.create.return_value = _fake_response('{"note": "thinking about it"}')
+    with pytest.raises((json.JSONDecodeError, ValueError)):
+        score_revision(
+            client,
+            model="claude-haiku-4-5",
+            max_tokens=512,
+            title="t",
+            summary="s",
+            revision_id=1,
+            author_phid="u",
+            bug_id=None,
+            raw_diff="@@",
+        )

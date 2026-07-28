@@ -184,7 +184,7 @@ def score_revision(
     text_parts = [b.text for b in response.content if getattr(b, "type", "") == "text"]
     raw_text = "".join(text_parts)
     try:
-        parsed = extract_json_object(raw_text)
+        parsed = extract_json_object(raw_text, required_keys=("risk", "complexity"))
         scores = Scores.model_validate(parsed)
     except (json.JSONDecodeError, ValidationError) as e:
         log.error("scoring response was not valid JSON: %s\n---\n%s", e, raw_text[:1000])

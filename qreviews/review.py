@@ -31,7 +31,7 @@ from typing import Any
 
 from anthropic import Anthropic
 
-from qreviews.json_utils import extract_json_object
+from qreviews.json_utils import extract_json_object, find_json_objects
 from qreviews.searchfox import TOOL_SCHEMAS, execute_tool, has_searchfox
 from qreviews.skills import load_skill
 
@@ -248,6 +248,10 @@ class ReviewResult:
     # without the model producing a final answer. The caller skips
     # posting when this is set.
     iteration_limit_exceeded: bool = False
+    # How many schema-shaped JSON payloads the final response contained.
+    # More than one means the model answered, second-guessed itself, and
+    # answered again; the caller can't tell which one it meant.
+    payload_candidates: int = 0
 
 
 def _build_user_message(
@@ -307,11 +311,17 @@ def parse_review_payload(
     rejected and their `body` text is appended to the summary so nothing
     is silently lost.
     """
+    required = ("summary", "findings")
+    candidates = find_json_objects(raw_text, required_keys=required)
     try:
-        payload = extract_json_object(raw_text)
+        payload = extract_json_object(raw_text, required_keys=required)
     except json.JSONDecodeError:
         log.warning("review response was not parseable JSON; falling back to summary-only")
-        return ReviewResult(summary=raw_text.strip(), parse_failed=True)
+        return ReviewResult(
+            summary=raw_text.strip(),
+            parse_failed=True,
+            payload_candidates=len(candidates),
+        )
 
     summary = str(payload.get("summary") or "").strip()
     raw_findings = payload.get("findings") or []
@@ -368,6 +378,7 @@ def parse_review_payload(
         summary=summary,
         findings=accepted,
         rejected_count=rejected_count,
+        payload_candidates=len(candidates),
     )
 
 

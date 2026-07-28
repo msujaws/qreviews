@@ -300,6 +300,7 @@ def test_parse_review_payload_happy_path():
     assert res.findings[0].confidence == 0.9
     assert res.parse_failed is False
     assert res.rejected_count == 0
+    assert res.payload_candidates == 1
 
 
 def test_parse_review_payload_rejects_invalid_anchor():
@@ -333,6 +334,37 @@ def test_parse_review_payload_falls_back_on_non_json():
     res = parse_review_payload("just some prose, no json", legal_anchors=_LEGAL)
     assert res.parse_failed is True
     assert res.summary == "just some prose, no json"
+    assert res.findings == []
+    assert res.payload_candidates == 0
+
+
+def test_parse_review_payload_counts_self_corrected_payloads():
+    # D313322: an answer, a self-correction in prose, then a revised answer.
+    raw = (
+        "One minor doc issue worth flagging:\n\n```json\n"
+        + json.dumps(
+            {
+                "summary": "",
+                "findings": [
+                    {
+                        "file_path": "dom/foo/Bar.cpp",
+                        "line": 117,
+                        "is_new_file": True,
+                        "body": "Move it.",
+                        "confidence": 0.5,
+                    }
+                ],
+            }
+        )
+        + "\n```\n\nWait — let me re-check that. I'll drop this marginal finding.\n\n"
+        "```json\n"
+        + json.dumps({"summary": "", "findings": []})
+        + "\n```\n"
+    )
+    res = parse_review_payload(raw, legal_anchors=_LEGAL)
+    assert res.payload_candidates == 2
+    assert res.parse_failed is False
+    # The last payload wins, but the caller still sees the ambiguity.
     assert res.findings == []
 
 
