@@ -26,6 +26,7 @@ from qreviews.test_coverage import (
     format_coverage_block,
     lookup_existing_coverage,
 )
+from qreviews.validation import validate_rendered_body, validate_review
 
 log = logging.getLogger(__name__)
 
@@ -533,23 +534,89 @@ class Poller:
                 skipped_reason="tool_iteration_limit",
             )
 
+        # Second pass over the generated output. `post_review` publishes
+        # inlines first and the summary second with no partial-abort path,
+        # so every gate has to clear before it is entered.
+        summary = review.summary
+        findings = review.findings
+        vcfg = self.config.validation
+        if vcfg.enabled:
+            outcome = validate_review(
+                review,
+                min_confidence=vcfg.min_finding_confidence,
+                max_summary_chars=vcfg.max_summary_chars,
+                max_finding_chars=vcfg.max_finding_chars,
+            )
+            if not outcome.ok:
+                log.warning(
+                    "%s: review failed validation (%s); not posting",
+                    revision.display_id,
+                    outcome.skip_reason,
+                )
+                self.store.record_reviewed(
+                    revision_phid=revision.phid,
+                    diff_phid=diff.phid,
+                    review_body="",
+                    model=review.model,
+                    usage=review.usage,
+                    posted=False,
+                    skipped_reason=outcome.skip_reason,
+                    tool_calls=review.tool_calls,
+                    skip_detail=outcome.detail(),
+                )
+                return ProcessResult(
+                    revision_id=revision.id,
+                    posted=False,
+                    skipped_reason=outcome.skip_reason,
+                )
+            summary = outcome.summary
+            findings = outcome.findings
+
         rendered = render_comment(
             revision_phid=revision.phid,
             scores=scoring.scores,
-            review_body=review.summary,
+            review_body=summary,
             review_model=review.model,
             threshold=max(risk_threshold, complexity_threshold),
-            findings=review.findings,
+            findings=findings,
             dashboard_url=self.config.dashboard.public_url,
             revision_id=revision.id,
         )
+
+        if vcfg.enabled:
+            body_rejections = validate_rendered_body(
+                rendered.body, max_chars=vcfg.max_body_chars
+            )
+            if body_rejections:
+                # Reaching here means the wrapper template itself misbehaved.
+                log.error(
+                    "%s: rendered comment failed validation (%s); not posting",
+                    revision.display_id,
+                    "; ".join(str(r) for r in body_rejections),
+                )
+                self.store.record_reviewed(
+                    revision_phid=revision.phid,
+                    diff_phid=diff.phid,
+                    review_body="",
+                    model=review.model,
+                    usage=review.usage,
+                    posted=False,
+                    skipped_reason="validation_rendered_body",
+                    tool_calls=review.tool_calls,
+                    skip_detail={"rejections": [str(r) for r in body_rejections]},
+                )
+                return ProcessResult(
+                    revision_id=revision.id,
+                    posted=False,
+                    skipped_reason="validation_rendered_body",
+                )
 
         inlines_posted = post_review(
             self.conduit, rendered=rendered, diff_id=diff.id, dry_run=dry_run
         )
         posted = (not dry_run)
 
-        findings_json = json.dumps([asdict(f) for f in review.findings])
+        findings_json = json.dumps([asdict(f) for f in findings])
 
         self.store.record_reviewed(
             revision_phid=revision.phid,

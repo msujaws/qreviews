@@ -30,6 +30,21 @@ defaults:
   risk_threshold: 3
   complexity_threshold: 3
 
+validation:
+  # Second pass over generated review output before anything is posted.
+  # Structural failures (unparseable response, competing JSON payloads,
+  # leaked prompt scaffolding, verdict language) suppress the whole post
+  # and are recorded as a validation_* skip reason. Voice problems clear
+  # the summary or drop the individual finding.
+  enabled: true
+  # Findings below this confidence are dropped. The review prompt asks the
+  # model for at least 80% confidence, so this sits just under that.
+  min_finding_confidence: 0.7
+  # Length ceilings. The style guide caps a finding at four sentences.
+  max_summary_chars: 1200
+  max_finding_chars: 800
+  max_body_chars: 6000
+
 dashboard:
   host: 127.0.0.1
   port: 8765

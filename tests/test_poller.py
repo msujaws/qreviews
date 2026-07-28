@@ -10,7 +10,7 @@ import pytest
 
 from qreviews.conduit import Diff, Revision
 from qreviews.poller import Poller
-from qreviews.review import ReviewResult
+from qreviews.review import Finding, ReviewResult, parse_review_payload
 
 
 def _rev(
@@ -82,7 +82,7 @@ def test_process_revision_below_threshold_posts(mocked_poller):
             "risk": 1, "complexity": 1,
             "risk_factors": ["docs only"], "complexity_factors": ["3 LOC"],
         })),
-        _claude_text("### Looks good\nNo findings — straightforward docs change."),
+        _claude_text(json.dumps({"summary": "", "findings": []})),
     ]
     group = poller.config.enabled_groups()[0]
     result = poller.process_revision(_rev(), group, dry_run=False)
@@ -90,10 +90,10 @@ def test_process_revision_below_threshold_posts(mocked_poller):
     assert result.risk == 1
     assert result.complexity == 1
     conduit.publish_review.assert_called_once()
-    # The posted body should include the score scaffold + the Claude review body.
+    # The posted body should carry the score scaffold and the no-findings line.
     body = conduit.publish_review.call_args.args[1]
     assert "Risk: **1/10**" in body
-    assert "No findings" in body
+    assert "No inline findings raised" in body
 
 
 def test_process_revision_above_threshold_skips(mocked_poller):
@@ -129,6 +129,125 @@ def test_exhausted_tool_budget_does_not_post(mocked_poller, mocker):
     conduit.create_inline.assert_not_called()
 
 
+# Verbatim shape of what the review model emitted on D313322: an answer, a
+# self-correction in prose, then a revised answer. Every character of this
+# was published in the comment body.
+D313322_RAW_TEXT = """\
+The code change and tests look correct. One minor doc issue worth flagging:
+
+```json
+{
+  "summary": "",
+  "findings": [
+    {
+      "file_path": "browser/components/asrouter/docs/targeting-guide.md",
+      "line": 88,
+      "is_new_file": true,
+      "body": "The preferenceIsLocked section would be more discoverable next to its siblings.",
+      "confidence": 0.5
+    }
+  ]
+}
+```
+
+Wait — let me re-check that. Looking at the diff again: the ordering is
+already a coherent grouping. That's fine. I'll drop this marginal finding.
+
+```json
+{
+  "summary": "",
+  "findings": []
+}
+```
+"""
+
+
+def test_self_corrected_double_payload_is_not_posted(mocked_poller, mocker):
+    poller, conduit, anthropic = mocked_poller
+    anthropic.messages.create.return_value = _claude_text(json.dumps({
+        "risk": 1, "complexity": 1, "risk_factors": ["docs"], "complexity_factors": ["1 LOC"],
+    }))
+    # Drive the real parser so this exercises the json_utils fix and the
+    # validation gate together.
+    mocker.patch(
+        "qreviews.poller.generate_review",
+        return_value=parse_review_payload(D313322_RAW_TEXT),
+    )
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(_rev(), group, dry_run=False)
+
+    assert result.posted is False
+    assert result.skipped_reason == "validation_ambiguous_payloads"
+    conduit.publish_review.assert_not_called()
+    conduit.create_inline.assert_not_called()
+
+
+def test_chain_of_thought_never_reaches_conduit(mocked_poller, mocker):
+    poller, conduit, anthropic = mocked_poller
+    anthropic.messages.create.return_value = _claude_text(json.dumps({
+        "risk": 1, "complexity": 1, "risk_factors": ["docs"], "complexity_factors": ["1 LOC"],
+    }))
+    mocker.patch(
+        "qreviews.poller.generate_review",
+        return_value=parse_review_payload(D313322_RAW_TEXT),
+    )
+    group = poller.config.enabled_groups()[0]
+    poller.process_revision(_rev(), group, dry_run=False)
+
+    sent = json.dumps(
+        [str(c) for c in conduit.mock_calls],
+    )
+    assert "let me re-check" not in sent
+    assert '"findings"' not in sent
+
+
+def test_unparseable_review_is_not_posted(mocked_poller, mocker):
+    poller, conduit, anthropic = mocked_poller
+    anthropic.messages.create.return_value = _claude_text(json.dumps({
+        "risk": 1, "complexity": 1, "risk_factors": ["docs"], "complexity_factors": ["3 LOC"],
+    }))
+    mocker.patch(
+        "qreviews.poller.generate_review",
+        return_value=parse_review_payload("Let me think about this some more."),
+    )
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(_rev(), group, dry_run=False)
+
+    assert result.posted is False
+    assert result.skipped_reason == "validation_parse_failed"
+    conduit.publish_review.assert_not_called()
+
+
+def test_low_confidence_finding_is_not_posted_inline(mocked_poller, mocker):
+    poller, conduit, anthropic = mocked_poller
+    anthropic.messages.create.return_value = _claude_text(json.dumps({
+        "risk": 1, "complexity": 1, "risk_factors": ["docs"], "complexity_factors": ["3 LOC"],
+    }))
+    mocker.patch(
+        "qreviews.poller.generate_review",
+        return_value=ReviewResult(
+            summary="",
+            findings=[
+                Finding(
+                    file_path="a.js",
+                    line=1,
+                    is_new_file=True,
+                    body="Rename the variable.",
+                    confidence=0.2,
+                )
+            ],
+            payload_candidates=1,
+        ),
+    )
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(_rev(), group, dry_run=False)
+
+    # The summary still posts; only the marginal inline is dropped.
+    assert result.posted is True
+    conduit.create_inline.assert_not_called()
+    conduit.publish_review.assert_called_once()
+
+
 def test_dedup_short_circuits(mocked_poller):
     poller, conduit, anthropic = mocked_poller
     anthropic.messages.create.return_value = _claude_text(json.dumps({
@@ -147,7 +266,7 @@ def test_dry_run_does_not_post(mocked_poller):
     poller, conduit, anthropic = mocked_poller
     anthropic.messages.create.side_effect = [
         _claude_text(json.dumps({"risk": 0, "complexity": 0, "risk_factors": [], "complexity_factors": []})),
-        _claude_text("### Looks good\n"),
+        _claude_text(json.dumps({"summary": "", "findings": []})),
     ]
     group = poller.config.enabled_groups()[0]
     result = poller.process_revision(_rev(), group, dry_run=True)
@@ -301,7 +420,7 @@ def test_empty_members_lookup_does_not_skip(mocked_poller):
         _claude_text(json.dumps({
             "risk": 0, "complexity": 0, "risk_factors": [], "complexity_factors": [],
         })),
-        _claude_text("### Looks good\n"),
+        _claude_text(json.dumps({"summary": "", "findings": []})),
     ]
     group = poller.config.enabled_groups()[0]
     result = poller.process_revision(_rev(), group, dry_run=True)
@@ -318,7 +437,7 @@ def test_member_restriction_can_be_disabled(mocked_poller):
         _claude_text(json.dumps({
             "risk": 0, "complexity": 0, "risk_factors": [], "complexity_factors": [],
         })),
-        _claude_text("### Looks good\n"),
+        _claude_text(json.dumps({"summary": "", "findings": []})),
     ]
     result = poller.process_revision(_rev(), group, dry_run=True)
     assert result.skipped_reason != "author_not_in_group"
@@ -391,7 +510,7 @@ def test_unresolvable_secure_revision_slug_does_not_block_reviews(mocked_poller)
         _claude_text(json.dumps({
             "risk": 1, "complexity": 1, "risk_factors": [], "complexity_factors": [],
         })),
-        _claude_text("### Looks good\n"),
+        _claude_text(json.dumps({"summary": "", "findings": []})),
     ]
     # Skill needed for the review step on this group.
     group = poller.config.enabled_groups()[0]
@@ -474,7 +593,7 @@ def test_process_revision_threads_supplemental_skills_into_review(
             "risk": 1, "complexity": 1,
             "risk_factors": [], "complexity_factors": [],
         })),
-        _claude_text("### ok\nlooks fine"),
+        _claude_text(json.dumps({"summary": "", "findings": []})),
     ]
     group = poller.config.enabled_groups()[0]
     result = poller.process_revision(rev, group, dry_run=True)

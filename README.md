@@ -78,11 +78,15 @@ flowchart LR
    runs a multi-turn Claude Sonnet conversation. The model has read-only
    tool access to mozilla-central via `searchfox-cli` for context: file
    contents, symbol definitions, callers/callees, and text/regex search.
-   Output is Markdown.
-5. **Post.** Renders a templated advisory comment (scores + factors +
-   review) and posts a single `comment` transaction via
-   `differential.revision.edit`.
-6. **Track.** Every step lands in SQLite and surfaces on the dashboard.
+   Output is structured JSON: a summary plus line-anchored findings.
+5. **Validate.** A second pass checks the generated output before anything
+   is posted. Structural failures — an unparseable response, competing JSON
+   payloads, leaked prompt scaffolding, verdict language — suppress the
+   whole post and record a `validation_*` skip reason. Voice problems clear
+   the summary or drop the individual finding.
+6. **Post.** Posts each surviving finding as an inline comment, then a
+   templated advisory summary via `differential.createcomment`.
+7. **Track.** Every step lands in SQLite and surfaces on the dashboard.
 
 > **Non-blocking by design.** The only Phabricator write operation in the
 > entire codebase is a `comment` transaction. qreviews has no path to
@@ -284,6 +288,13 @@ anthropic:
 defaults:
   risk_threshold: 3                   # STRICTLY LESS THAN this triggers review
   complexity_threshold: 3
+
+validation:
+  enabled: true                       # second pass before anything is posted
+  min_finding_confidence: 0.7         # drop findings the model isn't sure about
+  max_summary_chars: 1200
+  max_finding_chars: 800
+  max_body_chars: 6000
 
 reviewer_groups:
   - slug: ip-protection-reviewers

@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS reviewed (
     -- structured-output review results
     inline_count            INTEGER DEFAULT 0,
     findings_json           TEXT,
+    -- what the pre-post validation gate rejected or dropped
+    skip_detail_json        TEXT,
     PRIMARY KEY (revision_phid, diff_phid)
 );
 
@@ -156,6 +158,7 @@ class Store:
             ("coverage_lookup_json", "TEXT"),
             ("inline_count", "INTEGER DEFAULT 0"),
             ("findings_json", "TEXT"),
+            ("skip_detail_json", "TEXT"),
         ]
         for name, decl in wanted:
             if name in existing:
@@ -316,8 +319,10 @@ class Store:
         tool_calls: int = 0,
         inline_count: int = 0,
         findings_json: str | None = None,
+        skip_detail: dict | None = None,
     ) -> None:
         now = int(time.time())
+        skip_detail_json = json.dumps(skip_detail) if skip_detail else None
         with self.txn() as conn:
             conn.execute(
                 """
@@ -326,7 +331,7 @@ class Store:
                     review_input_tokens=?, review_output_tokens=?,
                     review_cache_read=?, review_cache_write=?,
                     review_tool_calls=?,
-                    inline_count=?, findings_json=?,
+                    inline_count=?, findings_json=?, skip_detail_json=?,
                     posted=?, posted_at=?, skipped_reason=?
                 WHERE revision_phid=? AND diff_phid=?
                 """,
@@ -341,6 +346,7 @@ class Store:
                     tool_calls,
                     inline_count,
                     findings_json,
+                    skip_detail_json,
                     1 if posted else 0,
                     now if posted else None,
                     skipped_reason,
@@ -358,7 +364,11 @@ class Store:
                 revision_id=row["revision_id"] if row else None,
                 group_slug=row["group_slug"] if row else None,
                 event_type="posted" if posted else "skipped",
-                detail={"skipped_reason": skipped_reason} if skipped_reason else {},
+                detail=(
+                    {"skipped_reason": skipped_reason, **(skip_detail or {})}
+                    if skipped_reason
+                    else {}
+                ),
             )
 
     def record_skipped(

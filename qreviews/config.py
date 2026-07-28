@@ -46,6 +46,25 @@ class Defaults(BaseModel):
     complexity_threshold: int = 3
 
 
+class ValidationConfig(BaseModel):
+    """The second pass over generated review output, before posting.
+
+    Defaults are chosen so an existing config.yaml needs no edit.
+    """
+
+    # Deterministic checks in qreviews/validation.py. Turning this off
+    # restores the pre-gate behaviour and is the escape hatch when a
+    # pattern turns out to be too aggressive.
+    enabled: bool = True
+    # Findings below this confidence are dropped. Set just under the
+    # review prompt's own "at least 80% confident" instruction so the
+    # model's calibration isn't fought.
+    min_finding_confidence: float = Field(default=0.7, ge=0.0, le=1.0)
+    max_summary_chars: int = 1200
+    max_finding_chars: int = 800
+    max_body_chars: int = 6000
+
+
 class DashboardConfig(BaseModel):
     host: str = "127.0.0.1"
     port: int = 8765
@@ -92,6 +111,7 @@ class Config(BaseModel):
     phabricator: PhabricatorConfig
     anthropic: AnthropicConfig
     defaults: Defaults = Field(default_factory=Defaults)
+    validation: ValidationConfig = Field(default_factory=ValidationConfig)
     dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     reviewer_groups: list[ReviewerGroup] = Field(default_factory=list)
