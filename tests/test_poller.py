@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from qreviews.conduit import Diff, Revision
+from qreviews.critic import CriticVerdict
 from qreviews.poller import Poller
 from qreviews.review import Finding, ReviewResult, parse_review_payload
 
@@ -246,6 +247,128 @@ def test_low_confidence_finding_is_not_posted_inline(mocked_poller, mocker):
     assert result.posted is True
     conduit.create_inline.assert_not_called()
     conduit.publish_review.assert_called_once()
+
+
+def _reviewed_with_one_finding() -> ReviewResult:
+    return ReviewResult(
+        summary="",
+        findings=[
+            Finding(
+                file_path="dom/foo/Bar.cpp",
+                line=1,
+                is_new_file=True,
+                body="Remove the unused parameter.",
+                confidence=0.9,
+            )
+        ],
+        payload_candidates=1,
+    )
+
+
+def _critic_verdict(**payload) -> CriticVerdict:
+    return CriticVerdict(model="claude-haiku-4-5-20251001", usage={}, **payload)
+
+
+def test_critic_block_prevents_posting(mocked_poller, mocker):
+    poller, conduit, anthropic = mocked_poller
+    anthropic.messages.create.return_value = _claude_text(json.dumps({
+        "risk": 1, "complexity": 1, "risk_factors": ["docs"], "complexity_factors": ["3 LOC"],
+    }))
+    mocker.patch(
+        "qreviews.poller.generate_review", return_value=_reviewed_with_one_finding()
+    )
+    mocker.patch(
+        "qreviews.poller.critique_review",
+        return_value=_critic_verdict(approved=False, block_reasons=["not grounded"]),
+    )
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(_rev(), group, dry_run=False)
+
+    assert result.posted is False
+    assert result.skipped_reason == "critic_rejected"
+    conduit.publish_review.assert_not_called()
+    conduit.create_inline.assert_not_called()
+
+
+def test_critic_error_is_recorded_separately(mocked_poller, mocker):
+    poller, conduit, anthropic = mocked_poller
+    anthropic.messages.create.return_value = _claude_text(json.dumps({
+        "risk": 1, "complexity": 1, "risk_factors": ["docs"], "complexity_factors": ["3 LOC"],
+    }))
+    mocker.patch(
+        "qreviews.poller.generate_review", return_value=_reviewed_with_one_finding()
+    )
+    mocker.patch(
+        "qreviews.poller.critique_review",
+        return_value=_critic_verdict(approved=False, errored=True),
+    )
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(_rev(), group, dry_run=False)
+
+    assert result.skipped_reason == "critic_error"
+    conduit.publish_review.assert_not_called()
+
+
+def test_critic_drop_removes_only_that_finding(mocked_poller, mocker):
+    poller, conduit, anthropic = mocked_poller
+    anthropic.messages.create.return_value = _claude_text(json.dumps({
+        "risk": 1, "complexity": 1, "risk_factors": ["docs"], "complexity_factors": ["3 LOC"],
+    }))
+    mocker.patch(
+        "qreviews.poller.generate_review", return_value=_reviewed_with_one_finding()
+    )
+    mocker.patch(
+        "qreviews.poller.critique_review",
+        return_value=_critic_verdict(approved=True, drop_finding_indices=[0]),
+    )
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(_rev(), group, dry_run=False)
+
+    assert result.posted is True
+    conduit.create_inline.assert_not_called()
+    body = conduit.publish_review.call_args.args[1]
+    assert "No inline findings raised" in body
+
+
+def test_critic_receives_diff_context_for_each_finding(mocked_poller, mocker):
+    poller, conduit, anthropic = mocked_poller
+    anthropic.messages.create.return_value = _claude_text(json.dumps({
+        "risk": 1, "complexity": 1, "risk_factors": ["docs"], "complexity_factors": ["3 LOC"],
+    }))
+    conduit.get_raw_diff.return_value = (
+        "diff --git a/dom/foo/Bar.cpp b/dom/foo/Bar.cpp\n"
+        "--- a/dom/foo/Bar.cpp\n+++ b/dom/foo/Bar.cpp\n"
+        "@@ -1,1 +1,2 @@\n+int b = 3;\n x\n"
+    )
+    mocker.patch(
+        "qreviews.poller.generate_review", return_value=_reviewed_with_one_finding()
+    )
+    spy = mocker.patch(
+        "qreviews.poller.critique_review", return_value=_critic_verdict(approved=True)
+    )
+    group = poller.config.enabled_groups()[0]
+    poller.process_revision(_rev(), group, dry_run=False)
+
+    excerpts = spy.call_args.kwargs["diff_excerpts"]
+    assert "+int b = 3;" in excerpts[0]
+
+
+def test_critic_can_be_disabled(mocked_poller, mocker):
+    poller, conduit, anthropic = mocked_poller
+    poller.config.validation.critic_enabled = False
+    anthropic.messages.create.return_value = _claude_text(json.dumps({
+        "risk": 1, "complexity": 1, "risk_factors": ["docs"], "complexity_factors": ["3 LOC"],
+    }))
+    mocker.patch(
+        "qreviews.poller.generate_review", return_value=_reviewed_with_one_finding()
+    )
+    spy = mocker.patch("qreviews.poller.critique_review")
+    group = poller.config.enabled_groups()[0]
+    result = poller.process_revision(_rev(), group, dry_run=False)
+
+    spy.assert_not_called()
+    assert result.posted is True
+    conduit.create_inline.assert_called_once()
 
 
 def test_dedup_short_circuits(mocked_poller):

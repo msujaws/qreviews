@@ -46,7 +46,7 @@ def _row_time_saved_hours(row) -> float:
 
 
 def _row_cost(row) -> float:
-    return estimate_cost_usd(
+    total = estimate_cost_usd(
         row["scoring_model"] or "",
         input_tokens=row["scoring_input_tokens"] or 0,
         output_tokens=row["scoring_output_tokens"] or 0,
@@ -59,6 +59,17 @@ def _row_cost(row) -> float:
         cache_read=row["review_cache_read"] or 0,
         cache_write=row["review_cache_write"] or 0,
     )
+    # Critic columns post-date the table, and test rows are often plain
+    # dicts without them.
+    if "critic_model" in _row_keys(row):
+        total += estimate_cost_usd(
+            row["critic_model"] or "",
+            input_tokens=row["critic_input_tokens"] or 0,
+            output_tokens=row["critic_output_tokens"] or 0,
+            cache_read=row["critic_cache_read"] or 0,
+            cache_write=row["critic_cache_write"] or 0,
+        )
+    return total
 
 
 # --------------------------------------------------------------------- summary
@@ -211,6 +222,12 @@ def row_to_detail(row) -> dict:
             findings = json.loads(row["findings_json"])
         except json.JSONDecodeError:
             findings = []
+    skip_detail = None
+    if "skip_detail_json" in keys and row["skip_detail_json"]:
+        try:
+            skip_detail = json.loads(row["skip_detail_json"])
+        except json.JSONDecodeError:
+            skip_detail = None
     return {
         "revision_phid": row["revision_phid"],
         "revision_id": row["revision_id"],
@@ -258,6 +275,14 @@ def row_to_detail(row) -> dict:
                 "cache_write": row["review_cache_write"] or 0,
                 "tool_calls": row["review_tool_calls"] or 0,
             },
+            "critic": {
+                "input": (row["critic_input_tokens"] if "critic_model" in keys else 0) or 0,
+                "output": (row["critic_output_tokens"] if "critic_model" in keys else 0) or 0,
+                "cache_read": (row["critic_cache_read"] if "critic_model" in keys else 0) or 0,
+                "cache_write": (row["critic_cache_write"] if "critic_model" in keys else 0) or 0,
+            },
         },
+        "critic_model": row["critic_model"] if "critic_model" in keys else None,
+        "skip_detail": skip_detail,
         "estimated_cost_usd": round(_row_cost(row), 4),
     }

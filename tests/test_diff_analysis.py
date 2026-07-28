@@ -7,6 +7,7 @@ from qreviews.diff_analysis import (
     _is_test_path,
     analyze_diff,
     format_test_signal_block,
+    hunk_excerpt,
 )
 
 
@@ -187,3 +188,48 @@ def test_format_test_signal_block_omits_coverage_when_none():
     block = format_test_signal_block(stats, coverage_block=None)
     assert "coverage_signal" not in block
     assert "in_diff_test_signal=absent" in block
+
+
+# ------------------------------------------------------------- hunk_excerpt
+
+_TWO_FILE_DIFF = """\
+diff --git a/dom/foo/Bar.cpp b/dom/foo/Bar.cpp
+--- a/dom/foo/Bar.cpp
++++ b/dom/foo/Bar.cpp
+@@ -10,4 +10,6 @@ void Foo() {
+   int a = 1;
+-  int b = 2;
++  int b = 3;
++  int c = 4;
+   return;
+ }
+diff --git a/other.js b/other.js
+--- a/other.js
++++ b/other.js
+@@ -1,2 +1,3 @@
+ x
++y
+"""
+
+
+def test_hunk_excerpt_centers_on_the_new_side_line():
+    out = hunk_excerpt(_TWO_FILE_DIFF, file_path="dom/foo/Bar.cpp", line=12, radius=1)
+    assert out.splitlines() == ["+  int b = 3;", "+  int c = 4;", "   return;"]
+
+
+def test_hunk_excerpt_scopes_to_the_named_file():
+    out = hunk_excerpt(_TWO_FILE_DIFF, file_path="other.js", line=2)
+    assert "+y" in out
+    assert "int b" not in out
+
+
+def test_hunk_excerpt_returns_empty_for_an_unknown_anchor():
+    assert hunk_excerpt(_TWO_FILE_DIFF, file_path="nope.js", line=1) == ""
+    assert hunk_excerpt(_TWO_FILE_DIFF, file_path="other.js", line=999) == ""
+
+
+def test_hunk_excerpt_clamps_at_the_hunk_edges():
+    out = hunk_excerpt(_TWO_FILE_DIFF, file_path="dom/foo/Bar.cpp", line=10, radius=50)
+    # No crash, and the whole file's hunk comes back.
+    assert "int a = 1" in out
+    assert "int c = 4" in out

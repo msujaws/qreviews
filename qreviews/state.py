@@ -65,6 +65,12 @@ CREATE TABLE IF NOT EXISTS reviewed (
     findings_json           TEXT,
     -- what the pre-post validation gate rejected or dropped
     skip_detail_json        TEXT,
+    -- the pre-post critic pass
+    critic_model            TEXT,
+    critic_input_tokens     INTEGER DEFAULT 0,
+    critic_output_tokens    INTEGER DEFAULT 0,
+    critic_cache_read       INTEGER DEFAULT 0,
+    critic_cache_write      INTEGER DEFAULT 0,
     PRIMARY KEY (revision_phid, diff_phid)
 );
 
@@ -159,6 +165,11 @@ class Store:
             ("inline_count", "INTEGER DEFAULT 0"),
             ("findings_json", "TEXT"),
             ("skip_detail_json", "TEXT"),
+            ("critic_model", "TEXT"),
+            ("critic_input_tokens", "INTEGER DEFAULT 0"),
+            ("critic_output_tokens", "INTEGER DEFAULT 0"),
+            ("critic_cache_read", "INTEGER DEFAULT 0"),
+            ("critic_cache_write", "INTEGER DEFAULT 0"),
         ]
         for name, decl in wanted:
             if name in existing:
@@ -320,9 +331,12 @@ class Store:
         inline_count: int = 0,
         findings_json: str | None = None,
         skip_detail: dict | None = None,
+        critic_model: str = "",
+        critic_usage: dict[str, int] | None = None,
     ) -> None:
         now = int(time.time())
         skip_detail_json = json.dumps(skip_detail) if skip_detail else None
+        critic_usage = critic_usage or {}
         with self.txn() as conn:
             conn.execute(
                 """
@@ -332,6 +346,8 @@ class Store:
                     review_cache_read=?, review_cache_write=?,
                     review_tool_calls=?,
                     inline_count=?, findings_json=?, skip_detail_json=?,
+                    critic_model=?, critic_input_tokens=?, critic_output_tokens=?,
+                    critic_cache_read=?, critic_cache_write=?,
                     posted=?, posted_at=?, skipped_reason=?
                 WHERE revision_phid=? AND diff_phid=?
                 """,
@@ -347,6 +363,11 @@ class Store:
                     inline_count,
                     findings_json,
                     skip_detail_json,
+                    critic_model,
+                    critic_usage.get("input_tokens", 0),
+                    critic_usage.get("output_tokens", 0),
+                    critic_usage.get("cache_read_input_tokens", 0),
+                    critic_usage.get("cache_creation_input_tokens", 0),
                     1 if posted else 0,
                     now if posted else None,
                     skipped_reason,

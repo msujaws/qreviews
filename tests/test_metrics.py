@@ -6,6 +6,7 @@ from qreviews.metrics import (
     _axis_hours,
     compute_summary,
     daily_throughput,
+    row_to_detail,
     score_histograms,
 )
 from qreviews.state import Store
@@ -98,3 +99,83 @@ def test_throughput(store: Store):
     total_posted = sum(p["posted"] for p in ts)
     assert total_seen == 3
     assert total_posted == 1
+
+
+def _one_row(store: Store, *, critic: bool) -> dict:
+    store.record_seen(
+        revision_phid="PHID-DREV-critic",
+        diff_phid="PHID-DIFF-critic",
+        diff_id=1,
+        revision_id=1,
+        group_slug="ip-protection-reviewers",
+        title="rev",
+        author_phid="PHID-USER-x",
+        revision_created_at=1716000000,
+    )
+    store.record_scored(
+        revision_phid="PHID-DREV-critic",
+        diff_phid="PHID-DIFF-critic",
+        risk=1,
+        complexity=1,
+        risk_factors=["x"],
+        complexity_factors=["y"],
+        model="claude-haiku-4-5",
+        usage={"input_tokens": 1000, "output_tokens": 50},
+    )
+    store.record_reviewed(
+        revision_phid="PHID-DREV-critic",
+        diff_phid="PHID-DIFF-critic",
+        review_body="### ok\n",
+        model="claude-sonnet-4-6",
+        usage={"input_tokens": 5000, "output_tokens": 200},
+        posted=True,
+        critic_model="claude-haiku-4-5-20251001" if critic else "",
+        critic_usage={"input_tokens": 4000, "output_tokens": 100} if critic else None,
+    )
+    return row_to_detail(
+        next(
+            r
+            for r in store.iter_for_metrics(group_slug="ip-protection-reviewers")
+            if r["revision_phid"] == "PHID-DREV-critic"
+        )
+    )
+
+
+def test_critic_tokens_raise_the_estimated_cost(store: Store, tmp_db):
+    without = _one_row(store, critic=False)
+    other = Store(tmp_db.parent / "second.db")
+    other.init_schema()
+    with_critic = _one_row(other, critic=True)
+    assert with_critic["estimated_cost_usd"] > without["estimated_cost_usd"]
+    assert with_critic["tokens"]["critic"]["input"] == 4000
+    assert with_critic["critic_model"] == "claude-haiku-4-5-20251001"
+
+
+def test_skip_detail_is_surfaced(store: Store):
+    store.record_seen(
+        revision_phid="PHID-DREV-skip",
+        diff_phid="PHID-DIFF-skip",
+        diff_id=2,
+        revision_id=2,
+        group_slug="ip-protection-reviewers",
+        title="rev",
+        author_phid="PHID-USER-x",
+        revision_created_at=1716000000,
+    )
+    store.record_reviewed(
+        revision_phid="PHID-DREV-skip",
+        diff_phid="PHID-DIFF-skip",
+        review_body="",
+        model="claude-sonnet-4-6",
+        usage={},
+        posted=False,
+        skipped_reason="validation_parse_failed",
+        skip_detail={"rejections": ["parse_failed (summary): no payload"]},
+    )
+    row = next(
+        r
+        for r in store.iter_for_metrics(group_slug="ip-protection-reviewers")
+        if r["revision_phid"] == "PHID-DREV-skip"
+    )
+    detail = row_to_detail(row)
+    assert detail["skip_detail"]["rejections"] == ["parse_failed (summary): no payload"]

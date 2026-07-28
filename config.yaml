@@ -19,9 +19,13 @@ anthropic:
   scoring_model: claude-haiku-4-5-20251001
   # Used for the full review when scores pass the threshold.
   review_model: claude-sonnet-4-6
+  # Judges the generated review before it is posted. Sees the findings and
+  # a few diff lines around each one, never the whole diff.
+  critic_model: claude-haiku-4-5-20251001
   # Token caps to keep runaway costs bounded.
   scoring_max_tokens: 1024
   review_max_tokens: 4096
+  critic_max_tokens: 1024
 
 defaults:
   # A revision is auto-reviewed when BOTH risk and complexity are STRICTLY LESS
@@ -37,6 +41,15 @@ validation:
   # and are recorded as a validation_* skip reason. Voice problems clear
   # the summary or drop the individual finding.
   enabled: true
+  # Model critic, run after the deterministic checks pass. It votes only —
+  # it can block the review or drop individual findings, never rewrite them.
+  critic_enabled: true
+  # When the critic call itself errors: false suppresses the post, true
+  # posts anyway. Closed by default; a missed review costs nothing, a bad
+  # public comment is awkward to retract.
+  critic_fail_open: false
+  # Diff lines shown either side of a finding's anchor.
+  critic_context_lines: 8
   # Findings below this confidence are dropped. The review prompt asks the
   # model for at least 80% confidence, so this sits just under that.
   min_finding_confidence: 0.7

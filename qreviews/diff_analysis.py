@@ -173,6 +173,68 @@ def analyze_diff(raw_diff: str) -> DiffStats:
     )
 
 
+def hunk_excerpt(
+    raw_diff: str, *, file_path: str, line: int, radius: int = 8
+) -> str:
+    """Diff lines around `file_path:line` on the new side.
+
+    Lets a reviewer of the review see the code a finding points at without
+    being handed the whole diff — `max_diff_bytes` is 200 kB.
+
+    Returns "" when the anchor isn't in the diff.
+    """
+    current_path: str | None = None
+    new_line = 0
+    old_line = 0
+    in_hunk = False
+    # (new-side line number or None, raw diff line)
+    numbered: list[tuple[int | None, str]] = []
+
+    for text in raw_diff.splitlines():
+        m = _DIFF_GIT_RE.match(text)
+        if m:
+            current_path = m.group(2)
+            in_hunk = False
+            continue
+        if current_path is None:
+            continue
+        hunk = _HUNK_RE.match(text)
+        if hunk:
+            old_line = int(hunk.group("old_start"))
+            new_line = int(hunk.group("new_start"))
+            in_hunk = True
+            if current_path == file_path:
+                numbered.append((None, text))
+            continue
+        if not in_hunk:
+            continue
+
+        collect = current_path == file_path
+        prefix = text[:1]
+        if prefix in ("+", "", " "):
+            if collect:
+                numbered.append((new_line, text))
+            new_line += 1
+            if prefix != "+":
+                old_line += 1
+        elif prefix == "-":
+            if collect:
+                numbered.append((None, text))
+            old_line += 1
+        elif prefix == "\\":
+            continue
+        else:
+            in_hunk = False
+
+    positions = [i for i, (n, _) in enumerate(numbered) if n == line]
+    if not positions:
+        return ""
+    center = positions[0]
+    start = max(0, center - radius)
+    end = min(len(numbered), center + radius + 1)
+    return "\n".join(text for _, text in numbered[start:end])
+
+
 def format_test_signal_block(
     stats: DiffStats,
     *,

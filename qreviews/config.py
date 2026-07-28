@@ -37,8 +37,12 @@ class PhabricatorConfig(BaseModel):
 class AnthropicConfig(BaseModel):
     scoring_model: str
     review_model: str
+    # Judges the generated review before it is posted. Cheap by design —
+    # it sees the findings and their diff context, never the whole diff.
+    critic_model: str = "claude-haiku-4-5-20251001"
     scoring_max_tokens: int = 1024
     review_max_tokens: int = 4096
+    critic_max_tokens: int = 1024
 
 
 class Defaults(BaseModel):
@@ -56,6 +60,15 @@ class ValidationConfig(BaseModel):
     # restores the pre-gate behaviour and is the escape hatch when a
     # pattern turns out to be too aggressive.
     enabled: bool = True
+    # The model critic that runs after the deterministic checks pass.
+    critic_enabled: bool = True
+    # When the critic call itself errors: false suppresses the post, true
+    # posts anyway. Closed by default — a missed review costs nothing,
+    # a bad public comment is awkward to retract.
+    critic_fail_open: bool = False
+    # Diff lines shown either side of a finding's anchor so the critic can
+    # tell whether the finding is grounded in the code it points at.
+    critic_context_lines: int = 8
     # Findings below this confidence are dropped. Set just under the
     # review prompt's own "at least 80% confident" instruction so the
     # model's calibration isn't fought.

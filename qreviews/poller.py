@@ -15,7 +15,8 @@ from anthropic import Anthropic
 
 from qreviews.conduit import ConduitClient, Revision
 from qreviews.config import Config, ReviewerGroup, Secrets
-from qreviews.diff_analysis import analyze_diff, format_test_signal_block
+from qreviews.critic import CriticVerdict, apply_verdict, critique_review
+from qreviews.diff_analysis import analyze_diff, format_test_signal_block, hunk_excerpt
 from qreviews.poster import post_review, render_comment
 from qreviews.review import generate_review
 from qreviews.scoring import score_revision
@@ -572,6 +573,55 @@ class Poller:
             summary = outcome.summary
             findings = outcome.findings
 
+        # Model critic. Runs after the cheap checks so it never ingests
+        # leaked scaffolding — wasted tokens, and an injection vector. It
+        # judges the structured summary and findings rather than the
+        # rendered body, because the body carries only a count sentence:
+        # the finding text goes out as separate inline comments.
+        critic = CriticVerdict(skipped=True)
+        if vcfg.enabled and vcfg.critic_enabled:
+            excerpts = {
+                i: hunk_excerpt(
+                    raw_diff,
+                    file_path=f.file_path,
+                    line=f.line,
+                    radius=vcfg.critic_context_lines,
+                )
+                for i, f in enumerate(findings)
+            }
+            critic = critique_review(
+                self.anthropic,
+                model=self.config.anthropic.critic_model,
+                max_tokens=self.config.anthropic.critic_max_tokens,
+                revision_id=revision.id,
+                title=revision.title,
+                summary=summary,
+                findings=findings,
+                diff_excerpts=excerpts,
+                fail_open=vcfg.critic_fail_open,
+            )
+            if not critic.approved:
+                reason = "critic_error" if critic.errored else "critic_rejected"
+                self.store.record_reviewed(
+                    revision_phid=revision.phid,
+                    diff_phid=diff.phid,
+                    review_body="",
+                    model=review.model,
+                    usage=review.usage,
+                    posted=False,
+                    skipped_reason=reason,
+                    tool_calls=review.tool_calls,
+                    skip_detail=critic.detail(),
+                    critic_model=critic.model,
+                    critic_usage=critic.usage,
+                )
+                return ProcessResult(
+                    revision_id=revision.id, posted=False, skipped_reason=reason
+                )
+            summary, findings = apply_verdict(
+                critic, summary=summary, findings=findings
+            )
+
         rendered = render_comment(
             revision_phid=revision.phid,
             scores=scoring.scores,
@@ -605,6 +655,8 @@ class Poller:
                     skipped_reason="validation_rendered_body",
                     tool_calls=review.tool_calls,
                     skip_detail={"rejections": [str(r) for r in body_rejections]},
+                    critic_model=critic.model,
+                    critic_usage=critic.usage,
                 )
                 return ProcessResult(
                     revision_id=revision.id,
@@ -630,6 +682,8 @@ class Poller:
             tool_calls=review.tool_calls,
             inline_count=inlines_posted,
             findings_json=findings_json,
+            critic_model=critic.model,
+            critic_usage=critic.usage,
         )
 
         return ProcessResult(

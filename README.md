@@ -79,11 +79,15 @@ flowchart LR
    tool access to mozilla-central via `searchfox-cli` for context: file
    contents, symbol definitions, callers/callees, and text/regex search.
    Output is structured JSON: a summary plus line-anchored findings.
-5. **Validate.** A second pass checks the generated output before anything
-   is posted. Structural failures — an unparseable response, competing JSON
-   payloads, leaked prompt scaffolding, verdict language — suppress the
-   whole post and record a `validation_*` skip reason. Voice problems clear
-   the summary or drop the individual finding.
+5. **Validate.** Two gates check the generated output before anything is
+   posted. First a deterministic pass: structural failures — an unparseable
+   response, competing JSON payloads, leaked prompt scaffolding, verdict
+   language — suppress the whole post and record a `validation_*` skip
+   reason, while voice problems clear the summary or drop the individual
+   finding. Then a Claude Haiku critic sees each finding alongside the diff
+   lines it points at and votes: block the review, drop the summary, or
+   drop specific findings. It never rewrites. A critic error suppresses the
+   post by default (`critic_fail_open: false`).
 6. **Post.** Posts each surviving finding as an inline comment, then a
    templated advisory summary via `differential.createcomment`.
 7. **Track.** Every step lands in SQLite and surfaces on the dashboard.
@@ -161,10 +165,12 @@ single `comment` transaction. The bot has no code path that emits `accept`,
 **mozilla-central access.** Read-only, via `searchfox-cli` against the
 public searchfox index. No checkout, no build.
 
-**Anthropic access.** Scoring uses Claude Haiku; review uses Claude Sonnet.
-Token caps in `config.yaml` (`scoring_max_tokens`, `review_max_tokens`)
-bound runaway cost. Per-call cost is recorded in SQLite and shown on the
-dashboard.
+**Anthropic access.** Scoring uses Claude Haiku, review uses Claude Sonnet,
+and the pre-post critic uses Claude Haiku again. Token caps in `config.yaml`
+(`scoring_max_tokens`, `review_max_tokens`, `critic_max_tokens`) bound
+runaway cost. Per-call cost is recorded in SQLite and shown on the
+dashboard. The critic is skipped entirely when the review produced no
+summary and no findings, which is the common case.
 
 ---
 
@@ -284,6 +290,7 @@ phabricator:
 anthropic:
   scoring_model: claude-haiku-4-5-20251001
   review_model: claude-sonnet-4-6
+  critic_model: claude-haiku-4-5-20251001   # gates the review before posting
 
 defaults:
   risk_threshold: 3                   # STRICTLY LESS THAN this triggers review
@@ -291,6 +298,9 @@ defaults:
 
 validation:
   enabled: true                       # second pass before anything is posted
+  critic_enabled: true                # model critic after the cheap checks
+  critic_fail_open: false             # a critic error suppresses the post
+  critic_context_lines: 8
   min_finding_confidence: 0.7         # drop findings the model isn't sure about
   max_summary_chars: 1200
   max_finding_chars: 800
@@ -431,6 +441,8 @@ python -m qreviews review D123456 --post
 | `qreviews/scoring.py`             | Claude call → `{risk, complexity, factors}`.         |
 | `qreviews/review.py`              | Multi-turn Claude review with searchfox tool use.    |
 | `qreviews/searchfox.py`           | `searchfox-cli` wrappers exposed as Claude tools.    |
+| `qreviews/validation.py`          | Deterministic checks on review output before posting.|
+| `qreviews/critic.py`              | Model critic that gates the review before posting.   |
 | `qreviews/webhook.py`             | Phabricator Herald webhook receiver (HMAC-signed).   |
 | `qreviews/poster.py`              | Renders advisory comment + posts via Conduit.        |
 | `qreviews/poller.py`              | Discover → score → gate → review → post → record.    |
