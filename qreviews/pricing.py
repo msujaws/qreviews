@@ -13,13 +13,17 @@ class ModelPrice:
     cache_write_per_mtok: float
 
 
-# Anthropic published rates (USD / 1M tokens) as of late 2025/early 2026.
+# Anthropic published rates (USD / 1M tokens) as of September 2026.
 # Update this table when rates change.
 PRICES: dict[str, ModelPrice] = {
-    # Claude Opus 4.x
-    "claude-opus-4-7": ModelPrice(15.00, 75.00, 1.50, 18.75),
-    "claude-opus-4-6": ModelPrice(15.00, 75.00, 1.50, 18.75),
-    # Claude Sonnet 4.x
+    # Claude Fable 5.x
+    "claude-fable-5-1": ModelPrice(10.00, 50.00, 0.25, 12.50),
+    # Claude Opus 5.x / 4.x
+    "claude-opus-5-5": ModelPrice(4.00, 20.00, 0.20, 5.00),
+    "claude-opus-4-7": ModelPrice(5.00, 25.00, 0.50, 6.25),
+    "claude-opus-4-6": ModelPrice(5.00, 25.00, 0.50, 6.25),
+    # Claude Sonnet 5.x / 4.x
+    "claude-sonnet-5-5": ModelPrice(2.00, 10.00, 0.20, 2.50),
     "claude-sonnet-4-6": ModelPrice(3.00, 15.00, 0.30, 3.75),
     "claude-sonnet-4-5": ModelPrice(3.00, 15.00, 0.30, 3.75),
     # Claude Haiku 4.x
