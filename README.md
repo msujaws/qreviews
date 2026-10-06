@@ -288,9 +288,9 @@ phabricator:
   max_diff_bytes: 200000              # skip larger diffs entirely
 
 anthropic:
-  scoring_model: claude-haiku-4-5-20251001
-  review_model: claude-sonnet-4-6
-  critic_model: claude-haiku-4-5-20251001   # gates the review before posting
+  scoring_model: claude-haiku-4-5
+  review_model: claude-sonnet-5-5
+  critic_model: claude-haiku-4-5   # gates the review before posting
 
 defaults:
   risk_threshold: 3                   # STRICTLY LESS THAN this triggers review

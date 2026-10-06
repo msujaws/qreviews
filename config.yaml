@@ -16,15 +16,15 @@ phabricator:
 
 anthropic:
   # Cheap model for the scoring gate. Keep this fast and inexpensive.
-  scoring_model: claude-haiku-4-5-20251001
+  scoring_model: claude-haiku-4-5
   # Used for the full review when scores pass the threshold.
-  review_model: claude-sonnet-4-6
+  review_model: claude-sonnet-5-5
   # Judges the generated review before it is posted. Sees the findings and
   # a few diff lines around each one, never the whole diff.
-  critic_model: claude-haiku-4-5-20251001
+  critic_model: claude-haiku-4-5
   # Token caps to keep runaway costs bounded.
   scoring_max_tokens: 1024
-  review_max_tokens: 4096
+  review_max_tokens: 16000
   critic_max_tokens: 1024
 
 defaults:

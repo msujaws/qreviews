@@ -39,9 +39,9 @@ class AnthropicConfig(BaseModel):
     review_model: str
     # Judges the generated review before it is posted. Cheap by design —
     # it sees the findings and their diff context, never the whole diff.
-    critic_model: str = "claude-haiku-4-5-20251001"
+    critic_model: str = "claude-haiku-4-5"
     scoring_max_tokens: int = 1024
-    review_max_tokens: int = 4096
+    review_max_tokens: int = 16000
     critic_max_tokens: int = 1024
 
 
